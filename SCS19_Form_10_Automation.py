@@ -356,8 +356,8 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
                 re_run_status = 'red'
                 Paste_row += 1
 
-                if str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('S') == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('N') == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('A') == False:
-                    print('Put something in Re_Run_Samples_DF')
+   #             if str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('S')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('N')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('A')) == False:
+   #                 print('Put something in Re_Run_Samples_DF')
 
 
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
