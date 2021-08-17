@@ -67,9 +67,13 @@ def SPK_Ct_dataframe(form10):
     #SPK Control Average
     for x in range(len(form10)):
         if form10['Sample Name'][x] == 'SPK CONTROL':
-            SPK_control_values.append(form10['Ct'][x])
-    SPK_control_values = pd.to_numeric(SPK_control_values)
-    SPK_avg = sum(SPK_control_values) / len(SPK_control_values)
+            if form10['Ct'][x] == 'Undetermined':
+                SPK_avg = 'Undetermined'
+            else:
+                SPK_control_values = list(SPK_control_values)
+                SPK_control_values.append(form10['Ct'][x])
+                SPK_control_values = pd.to_numeric(SPK_control_values)
+                SPK_avg = sum(SPK_control_values) / len(SPK_control_values)
     
     #Extracting +SPK Information
     for x in range(0,len(form10)):
@@ -77,21 +81,31 @@ def SPK_Ct_dataframe(form10):
         if '+SPK' in str(form10['Sample Name'][x]):
             SPK_names.append(form10['Sample Name'][x])
             SPK_values.append(form10['Ct'][x])
-            
-            SPK_value_difference_calculation = abs(SPK_avg - float(form10['Ct'][x]))
-            SPK_value_differences.append(SPK_value_difference_calculation)
-            
-            if SPK_value_difference_calculation >= 1:
-                Inhibition_true_false.append('True')   
+
+            if SPK_avg == 'Undetermined':
+                SPK_Cts['SPK Value Differences'] = 'Undetermined'
+                Inhibition_true_false.append('True')
+                
             else:
-                Inhibition_true_false.append('False')
+                SPK_value_difference_calculation = abs(SPK_avg - float(form10['Ct'][x]))
+                SPK_value_differences.append(SPK_value_difference_calculation)
+            
+                if SPK_value_difference_calculation >= 1:
+                    Inhibition_true_false.append('True')   
+                else:
+                    Inhibition_true_false.append('False')
+
+            
                 
     #Displaying Results in DataFrame
-    SPK_Cts['SPK Names'] = SPK_names
+    SPK_Cts['Sample Names'] = SPK_names
     SPK_Cts['SPK Values'] = SPK_values
-    SPK_Cts['SPK Value Differences'] = SPK_value_differences
-    SPK_Cts['Inhibition?'] = Inhibition_true_false
     SPK_Cts['SPK Control Value'] = SPK_avg
+    SPK_Cts['Inhibition?'] = Inhibition_true_false
+
+    if SPK_avg != 'Undetermined':
+        SPK_Cts['SPK Value Differences'] = SPK_value_differences
+
     
     return SPK_Cts
 
