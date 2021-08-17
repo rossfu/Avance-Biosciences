@@ -42,7 +42,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     for file in file_path_list:
         if file.split('\\')[-1] == 'Plate_Information.txt':
             Plate_Info_Exists = True
-        if file.split('\\')[-1] == 'Re_Run_Sample_Information.txt':
+        if file.split('\\')[-1] == 'Re_Run_Sample_Info.txt':
             Re_Run_Sample_Info_Exists = True
 
     if Plate_Info_Exists == False: #Create Plate_Information.txt
@@ -50,14 +50,17 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
             Plate_Information.write('Plate\tDate_Processed\tFile_Length')
         Plate_Information.close()
 
+    Plate_Info_DF = pd.read_csv(Data_Directory_Path + '\\' + 'Plate_Information.txt', sep = '\t', lineterminator = '\r', header = 0)
+
 #Idea: Read File into Re_Run_Sample_Info_DATAFRAME, append dataframe, save as file:
-        
+    
     if Re_Run_Sample_Info_Exists == False: #Create Re_Run_Sample_Info.txt
         with open(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', 'w', newline='') as Re_Run_Sample_Info:
             Re_Run_Sample_Info.write('Need_Re_Run_Plate\tNeed_Re_Run_Samples\tReason_Re_Run\tRe_Run_Plate\tRe_Run_Samples')
         Re_Run_Sample_Info.close()
 
-    Plate_Info_DF = pd.read_csv(Data_Directory_Path + '\\' + 'Plate_Information.txt', sep = '\t', lineterminator = '\r', header = 0)    
+    Re_Run_Sample_Info_Dataframe = pd.read_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep = '\t', lineterminator = '\n', header = 0)    
+    
     
 #Initialize starting row variable outside the data file loop
     
@@ -90,6 +93,11 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 
     plate_report_ws = wb.create_sheet('Plate Report')
 
+    if 'Re_Run Samples' in wb.sheetnames:
+        re_run_samples_ws = wb['Re Run Samples']
+    else:
+        re_run_samples_ws = wb.create_sheet('Re Run Samples')
+
     
 #Create Back-Up Project File
     
@@ -116,10 +124,26 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         form10 = pd.read_csv(data_file, sep = '\t', lineterminator='\n', header = 10)
         form10_raw_extra = pd.read_csv(data_file, sep = '\t', lineterminator='\n', nrows = 9)
 
-#Clean Raw Data
-        form10.drop(['\r','FOS','HMD','LME','EW','BPR','NAW','HNS','HRN','EAF','BAF','TAF','CAF'], axis = 1, inplace = True)
+#Test for QuantStudio, run module, break loop
+
+        if form10.columns[0] != 'Well':
+            #Results are from Quant Studio.....
+            print('QUANT STUDIO FILE AVOIDED: ' + data_file.split('\\')[-1][:-4])
+            continue
+
+
+
+
+
 
         
+
+        
+#Clean Raw Data
+        
+        form10.drop(['\r','FOS','HMD','LME','EW','BPR','NAW','HNS','HRN','EAF','BAF','TAF','CAF'], axis = 1, inplace = True)
+
+
 #Write Raw Data to Excel
         for r in dataframe_to_rows(form10_raw_extra, index=False, header=True):
             ws.append(r)
@@ -179,7 +203,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         if Sample_Name_List[0].startswith('A'):
             Paste_row += 1
         
-        SPK_Ct = form10func.SPK_Ct_dataframe(form10)
+        SPK_Ct = form10func.SPK_Ct_dataframe(form10) #SPK_Ct will be used for a list of C_Samples
         for x in range(len(SPK_Ct['SPK Values'])):
             ws['AA' + str(Paste_row)] = SPK_Ct['SPK Values'][x]
             ws['AB' + str(Paste_row)] = SPK_Ct['SPK Value Differences'][x]
@@ -251,7 +275,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
 
-        if Sample_Name_List[0].startswith('A'):
+        if Sample_Name_List[0].startswith('AC'):
             Paste_row += 1
         
         for x in range(len(SPK_Ct['SPK Values'])):
@@ -273,34 +297,51 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         re_run_samples = 'not yet'
         re_run_samples_inhib = 'not yet'
 
-        #Status Color Indicator
-        plate_report_ws['B'+ str(Paste_row+1)].fill = PatternFill(start_color='0000FF00',end_color='0000FF00',fill_type='solid') #Default Green
+        #Status Color Indicator Default is Green
+        plate_report_ws['B'+ str(Paste_row+1)].fill = PatternFill(start_color='0000FF00', end_color='0000FF00', fill_type='solid')
 
-        #STDs
+        #STDs 1-7
         STD_additional_comment = []
         
         for x in range(0,len(Replicate_Differences['Sample Name'])):
             if Replicate_Differences['Sample Name'][x].startswith('STD'):
                 if Replicate_Differences['Sample Name'][x] != 'STD8':
-                    if '.' in str(Replicate_Differences['Ct diff'][x]): #Test Numbers only
-                        if abs(Replicate_Differences['Ct diff'][x]) > 1:
+                    if '.' in str(Replicate_Differences['Ct diff'][x]): #Numbers only
+                        if abs(Replicate_Differences['Ct diff'][x]) > 1: #Fails
                             plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
                             plate_report_ws['D'+ str(Paste_row+2)] = Replicate_Differences['Sample Name'][x] + ' Failed' + ' '.join(STD_additional_comment)
-                            STD_additional_comment.append('and' + Replicate_Differences['Sample Name'][x] + 'Failed')
+                            STD_additional_comment.append('and' + Replicate_Differences['Sample Name'][x] + 'Failed') #STD 1-7 message
                             re_run_status = 'red'
+                           
                         
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
 
         #Only STD8 fails plate
         for x in range(0,len(Replicate_Differences['Sample Name'])):
             if Replicate_Differences['Sample Name'][x] == 'STD8':
-                if abs(Replicate_Differences['Ct diff'][x]) > 1:
-                    plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
-                    plate_report_ws['D'+ str(Paste_row+2)] = 'STD 8 Failed' + ' '.join(STD_additional_comment)
-                    re_run_status = 'red'
+                if '.' in str(Replicate_Differences['Ct diff'][x]): #Numbers only
+                    if abs(Replicate_Differences['Ct diff'][x]) > 1:
+                        plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
+                        plate_report_ws['D'+ str(Paste_row+2)] = 'STD 8 Failed' + ' '.join(STD_additional_comment)
+                        re_run_status = 'red'
+
+
+        #Grabbing all samples needing re run due to failed STD, can replace above 2 blocks if modified
+
+        plate_fail_reason = []
+        sample_fail_reason = []
+                    
+        for x in range(0,len(Replicate_Differences['Sample Name'])):
+            if Replicate_Differences['Sample Name'][x].startswith('STD'):
+                if '.' in str(Replicate_Differences['Ct diff'][x]):
+                    if abs(Replicate_Differences['Ct diff'][x]) > 1:
+                        plate_fail_reason.append(Replicate_Differences['Sample Name'][x])
+                if str(Replicate_Differences['Ct diff'][x]).startswith('PROBLEM'):
+                    plate_fail_reason.append(Replicate_Differences['Sample Name'][x])
 
                 
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
+                                             
 
         #Slope, R2, LOD
 
@@ -308,9 +349,9 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         plate_report_ws['N' + str(Paste_row+1)] = 'R^2'
         plate_report_ws['O' + str(Paste_row+1)] = 'NTC'
         plate_report_ws['P' + str(Paste_row+1)] = 'LOD'
-        
-        plate_report_ws['M' + str(Paste_row+2)] = (form10.iloc[-8,1] + ' cycles/log decade')
+        plate_report_ws['M' + str(Paste_row+2)] = str(form10.iloc[-8,1]) + ' cycles/log decade'
         plate_report_ws['N' + str(Paste_row+2)] = form10.iloc[-6,2][:-1]
+            
         plate_report_ws['P' + str(Paste_row+2)] = LOD
 
         if QuantityMeans['NTC'][0] > 0:
@@ -321,58 +362,112 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         if float(form10.iloc[-8,1]) < SlopeMin:
             plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
             plate_report_ws['D'+ str(Paste_row+3)] = 'Slope Requirement'
+            plate_fail_reason.append('Slope Requirement')
             re_run_status = 'red'
         if float(form10.iloc[-8,1]) > SlopeMax:
             plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
             plate_report_ws['D'+ str(Paste_row+3)] = 'Slope Requirement'
+            plate_fail_reason.append('Slope Requirement')
             re_run_status = 'red'
-        if float(form10.iloc[-6,2][:-1]) < R2:
-            plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
-            plate_report_ws['D'+ str(Paste_row+4)] = 'R^2 Requirement'
-            re_run_status = 'red'
+        if isinstance(form10.iloc[-6,2][:-1], str) == False:
+            if float(form10.iloc[-6,2][:-1]) < R2:
+                plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
+                plate_report_ws['D'+ str(Paste_row+4)] = 'R^2 Requirement'
+                plate_fail_reason.append('R2 Requirement')
+                re_run_status = 'red'
         if QuantityMeans['NTC'][0] < LOD:
             plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
             plate_report_ws['D'+ str(Paste_row+5)] = 'NTC vs LOD Requirement'
+            plate_fail_reason.append('NTC vs LOD Requirement')
             re_run_status = 'red'
 
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
 
+
+
+#Re_Run_Samples Report and .txt Information
+
+    
+        #Connect Samples that were re_run with their former selves.
+        for C_name in SPK_Ct['Sample Names']:
+            C_name_with_no_plus_SPK = C_name.split('+')[0]
+            C_num = C_name.split('_')[0]
+            for Re_Run_Sample_Info_Index in range(0,len(Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'])):
+                if C_num == Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'][Re_Run_Sample_Info_Index].split('_')[0]:
+                    
+
+                    #Robust dumb method FOR PASTING RE RAN SAMPLES into DF, relies on date sort for accuracy
+                    Re_Run_Sample_Info_Dataframe.loc[Re_Run_Sample_Info_Index, 'Re_Run_Plate'] = data_file.split('\\')[-1][:-4]
+                    Re_Run_Sample_Info_Dataframe.loc[Re_Run_Sample_Info_Index, 'Re_Run_Samples'] = C_name_with_no_plus_SPK
+                    
+
+                    #Non-robust method to compare C123_A number to C123_A number (Re_Run has higher A number)
+#                    if int(C_name_with_no_plus_SPK.split('_')[2][1:]) > int(Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'][Re_Run_Sample_Info_Index].split('_')[2][1:]):
+#                        Re_Run_Sample_Info_Dataframe['Re_Run_Plate'][Re_Run_Sample_Info_Index] = data_file.split('\\')[-1][:-4]
+#                        Re_Run_Sample_Info_Dataframe['Re_Run_Samples'][Re_Run_Sample_Info_Index] = C_name_with_no_plus_SPK
+
+
         Samples_with_replicate_diff_issue = []
-
-
-        #Re_Run_Samples_Info Text Information
-        #open(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', 'w', newline='') as Re_Run_Sample_Info:
-
-
         
         for Replicate_value_index in range(0,len(Replicate_Differences)):
             if str(Replicate_Differences['Ct diff'][Replicate_value_index]).startswith('PROBLEM'):
                     
                 Samples_with_replicate_diff_issue.append(Replicate_Differences['Sample Name'][Replicate_value_index])
-                plate_report_ws['C' + str(Paste_row+6)] = ', '.join(Samples_with_replicate_diff_issue)
+                plate_report_ws['C' + str(Paste_row+6)] = ', '.join(Samples_with_replicate_diff_issue) #paste into 1 cell
                 plate_report_ws['D'+ str(Paste_row+6)] = 'Replicate Difference'
                 
                 re_run_samples = 'true'
                 re_run_status = 'red'
                 Paste_row += 1
 
-   #             if str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('S')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('N')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('A')) == False:
-   #                 print('Put something in Re_Run_Samples_DF')
+                if Replicate_Differences['Sample Name'][Replicate_value_index].startswith('AC'):
+                    plate_fail_reason.append('AC diff')
+                                       
+                #Update Re_Run_Samples with replicate diff fails
+                if len(plate_fail_reason) == 0:
+                    if str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('S')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('N')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('A')) == False:
+                        Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Plate':data_file.split('\\')[-1][:-4],'Need_Re_Run_Samples':Replicate_Differences['Sample Name'][Replicate_value_index].split('+')[0],'Reason_Re_Run':'Replicate Difference'}, ignore_index=True)
 
+###########################################
+#                    Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Samples':Replicate_Differences['Sample Name'][Replicate_value_index]}, ignore_index=True)
+#                    Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Reason_Re_Run':'Replicate Difference'}, ignore_index=True)
+                                                       
+#                    Re_Run_Sample_Info_Dataframe['Need_Re_Run_Plate'] =  data_file.split('\\')[-1][:-4]
+#                    Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'] =  Replicate_Differences['Sample Name'][Replicate_value_index]
+#                    Re_Run_Sample_Info_Dataframe['Reason_Re_Run'] =  'Replicate Difference'
+
+
+#Samples needing re-run from Plate Failiures
+        if len(plate_fail_reason) > 0:
+            for i in range(0,len(SPK_Ct)):
+                Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Plate':data_file.split('\\')[-1][:-4],'Need_Re_Run_Samples':SPK_Ct['Sample Names'][i].split('+')[0],'Reason_Re_Run': ', '.join(plate_fail_reason) + ' Failed'}, ignore_index=True)
 
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
         
         
-        for SampleIndex in range(0,len(SPK_Ct['Inhibition?'])):        
+        for Inhibited_Sample_Index in range(0,len(SPK_Ct['Inhibition?'])):        
 
-            if SPK_Ct['Inhibition?'][SampleIndex] == 'True':
+            if SPK_Ct['Inhibition?'][Inhibited_Sample_Index] == 'True':
 
-                plate_report_ws['C' + str(Paste_row+7)] = SPK_Ct['SPK Names'][SampleIndex]
+                plate_report_ws['C' + str(Paste_row+7)] = SPK_Ct['Sample Names'][Inhibited_Sample_Index]
                 plate_report_ws['D'+ str(Paste_row+7)] = 'Inhibited'
                 
                 re_run_samples_inhib = 'true'
                 re_run_status = 'red'
                 Paste_row += 1
+
+
+                #Update Re_Run_Samples with inhibited
+                if len(plate_fail_reason) == 0:
+                    Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Plate':data_file.split('\\')[-1][:-4],'Need_Re_Run_Samples':SPK_Ct['Sample Names'][Inhibited_Sample_Index].split('+')[0],'Reason_Re_Run':'Inhibited'}, ignore_index=True)
+
+##############################################
+#                Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Samples':SPK_Ct['SPK Names'][SampleIndex]}, ignore_index=True)
+#                Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Reason_Re_Run':'Inhibited'}, ignore_index=True)
+
+#                Re_Run_Sample_Info_Dataframe['Need_Re_Run_Plate'] =  data_file.split('\\')[-1][:-4]
+#                Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'] =  SPK_Ct['SPK Names'][SampleIndex]
+#                Re_Run_Sample_Info_Dataframe['Reason_Re_Run'] =  'Inhibited'
        
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
         
@@ -389,10 +484,23 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         for x in Sample_Name_List[-9:]:
                 if x.startswith('S') == False:
                         plate_report_ws['D' + str(Paste_row+1)] = 'Re-Run with a STD removed'
-
+                        #Samples are Re_Run
                         
 #Locate Area to write next set of Calcultions
         file_count += 1
+
+
+#Save Re Run Sample Info
+                        
+        Re_Run_Sample_Info_Dataframe.to_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep='\t', index = False, header = True)
+
+    for r in dataframe_to_rows(Re_Run_Sample_Info_Dataframe, index=False, header=True):
+        re_run_samples_ws.append(r)
+            
+#        with open(Data_Directory_Path + '\\' + 'all_Re_Run_Sample_Info.txt', newline='') as Re_Run_Sample_Info:
+#            dfAsString = Re_Run_Sample_Info_Dataframe.to_string(header=True, index=False)
+#            Re_Run_Sample_Info.write(dfAsString)
+#        Re_Run_Sample_Info.close()
 
 
 #Set Column Width for Readability
@@ -411,6 +519,14 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     plate_report_ws.column_dimensions['N'].width = 10
     plate_report_ws.column_dimensions['O'].width = 13
     plate_report_ws.column_dimensions['P'].width = 5
+
+
+    re_run_samples_ws.column_dimensions['A'].width = 18
+    re_run_samples_ws.column_dimensions['B'].width = 25
+    re_run_samples_ws.column_dimensions['C'].width = 30
+    re_run_samples_ws.column_dimensions['D'].width = 14
+    re_run_samples_ws.column_dimensions['E'].width = 25
+    
         
 #Save!
     
@@ -421,7 +537,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 
 #Set the parameters for the Program
         
-Data_Directory_Path = r"C:\Users\efu\Desktop\TestData"
+Data_Directory_Path = r"C:\Users\efu\Desktop\Data_with_Re_Runs"
 Excel_File_Name = 'Book1.xlsx'
 SlopeMin = -3.7
 SlopeMax = -3.1
