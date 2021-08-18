@@ -8,14 +8,34 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 import form10func
+import QuantStudioModule
+
+
+
+
+
+#Set the parameters for the Program
+
+
+        
+Data_Directory_Path = r"C:\Users\efu\Desktop\Data_With_Re_Runs"
+Excel_File_Name = 'Book1.xlsx'
+SlopeMin = -3.7
+SlopeMax = -3.1
+LOD = 35
+R2 = .998
+
+
 
 
 
 def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 
+
 #Find and Sort .TXT Raw Data Files
         
     excel_file_exists = False
+    backup_file_exists = False
     
     file_path_list = []
     
@@ -27,14 +47,16 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
             if names.endswith('.txt'):
                 file_path_list.append(os.path.join(root,names))
                 file_path_list.sort(key=os.path.getmtime)
-        
-    #file_path_list.reverse() #newest files are on top for report
-              
-    
+            
+            if names.startswith('Form10_BackUp'):
+                Backup_Filename = names
+                backup_file_exists = True
+
     file_count = 0
     
 
-#Set Up PlateInformation.txt File
+
+#Set Up Informational .txt Files
 
     Plate_Info_Exists = False
     Re_Run_Sample_Info_Exists = False
@@ -51,8 +73,10 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         Plate_Information.close()
 
     Plate_Info_DF = pd.read_csv(Data_Directory_Path + '\\' + 'Plate_Information.txt', sep = '\t', lineterminator = '\r', header = 0)
+    
+    files_before = len(Plate_Info_DF['Plate'])
 
-#Idea: Read File into Re_Run_Sample_Info_DATAFRAME, append dataframe, save as file:
+    #Read File into Re_Run_Sample_Info_DATAFRAME, append dataframe, save as file:
     
     if Re_Run_Sample_Info_Exists == False: #Create Re_Run_Sample_Info.txt
         with open(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', 'w', newline='') as Re_Run_Sample_Info:
@@ -61,18 +85,21 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 
     Re_Run_Sample_Info_Dataframe = pd.read_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep = '\t', lineterminator = '\n', header = 0)    
     
+
     
-#Initialize starting row variable outside the data file loop
+    #Initialize starting row variable outside the data file loop
     
     row_where_file_ends = Plate_Info_DF.File_Length.sum()
 
 
-#Only Recent Files get processed
 
+    #Only Recent Files get processed
             
     file_path_list = [i for i in file_path_list if i.split('\\')[-1][:-4] not in list(Plate_Info_DF['Plate'])]
     file_path_list = [i for i in file_path_list if i.split('\\')[-1] != 'Plate_Information.txt']
     file_path_list = [i for i in file_path_list if i.split('\\')[-1] != 'Re_Run_Sample_Info.txt']
+
+
     
 #Set Up Excel
         
@@ -82,18 +109,18 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         wb = load_workbook(workbook_path)
     else:
         wb = Workbook()
-                
-    if 'Form10_Raw Data' in wb.sheetnames:
+        sheet = wb.active
+        sheet.title = 'Form10_Raw Data'
         ws = wb['Form10_Raw Data']
-    else:
-        ws = wb.create_sheet('Form10_Raw Data')
+
+    ws = wb['Form10_Raw Data']
 
     if 'Plate Report' in wb.sheetnames:
         del wb['Plate Report']
 
     plate_report_ws = wb.create_sheet('Plate Report')
 
-    if 'Re_Run Samples' in wb.sheetnames:
+    if 'Re Run Samples' in wb.sheetnames:
         re_run_samples_ws = wb['Re Run Samples']
     else:
         re_run_samples_ws = wb.create_sheet('Re Run Samples')
@@ -104,7 +131,12 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     now = datetime.now()
 
     if excel_file_exists == True: #Preserve Current File
-        shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+        if backup_file_exists == True:
+            os.rename(Backup_Filename, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+        else:
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+      
 
 #Eliminate the 1 row off issue and Welcome the next batch
     
@@ -117,27 +149,48 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         ws['F' + str(row_where_file_ends)] = 'Files Processed ' + str(now.strftime('%Y-%m-%d %H:%M')) + ' and after'
 
 #Iterate over every file
+        
     for data_file in file_path_list:
         
-
-#Load Raw Data
-        form10 = pd.read_csv(data_file, sep = '\t', lineterminator='\n', header = 10)
-        form10_raw_extra = pd.read_csv(data_file, sep = '\t', lineterminator='\n', nrows = 9)
-
-#Test for QuantStudio, run module, break loop
-
-        if form10.columns[0] != 'Well':
-            #Results are from Quant Studio.....
-            print('QUANT STUDIO FILE AVOIDED: ' + data_file.split('\\')[-1][:-4])
-            continue
-
-
-
-
-
+        print(data_file.split('\\')[-1] + ' is on')
 
         
+#Test the Data file
 
+        test = pd.read_csv(data_file, sep = '\t', skip_blank_lines = False, usecols = [0])
+
+        if test.columns[0] == 'SDS 2.4':
+
+            form10 = pd.read_csv(data_file, sep = '\t', lineterminator='\n', header = 10)
+            form10_raw_extra = pd.read_csv(data_file, sep = '\t', lineterminator='\n', nrows = 9)
+
+        else:
+
+            wb.save(workbook_path)
+            
+            print('Processing Quant Studio File: ' + data_file.split('\\')[-1])
+
+            #Run QuantStudio function
+            QuantStudioModule.Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, file_count, files_before, SlopeMin, SlopeMax, LOD, R2)
+
+
+
+            #Reset Excel Variables
+
+            file_count += 1
+            
+            wb = load_workbook(workbook_path)
+
+            ws = wb['Form10_Raw Data']
+            plate_report_ws = wb['Plate Report']
+            re_run_samples_ws = wb['Re Run Samples']
+
+            Re_Run_Sample_Info_Dataframe = pd.read_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep = '\t', lineterminator = '\n', header = 0)    
+
+            Plate_Info_DF = pd.read_csv(Data_Directory_Path + '\\' + 'Plate_Information.txt', sep = '\t', lineterminator = '\r', header = 0)
+            row_where_file_ends = Plate_Info_DF.File_Length.sum()
+
+            continue
         
 #Clean Raw Data
         
@@ -153,17 +206,19 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         
         print(data_file + " is written")
 
-#Add File Information to PlateInformation.txt; Info not contained in Plate_Info_DF however
+        #Add File Information to PlateInformation.txt; Info not contained in Plate_Info_DF however
         
         with open(Data_Directory_Path + '\\' + 'Plate_Information.txt', 'a', newline = '\r') as Plate_Information:
             Plate_Information.write('\n'+data_file.split('\\')[-1][:-4]+'\t'+str(now.strftime('%Y-%m-%d %H:%M'))+'\t'+str(len(form10)+len(form10_raw_extra)+2))
         Plate_Information.close()
 
-#Manage Paste Offset
+#Form 10 Table
+        
+        #Manage Paste Offset
 
         Paste_row = row_where_file_ends + 12
 
-#Paste Calculation Header
+        #Paste Calculation Header
         
         ws['X' + str(Paste_row-1)] = 'Sample Name'
         
@@ -175,13 +230,13 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         ws['AB' + str(Paste_row-1)] = 'SPK Difference'
         ws['AC' + str(Paste_row-1)] = 'Inhibition?'
         
-#Paste Sample Names
+        #Paste Sample Names
         Sample_Name_List = form10func.Get_Sample_Names(form10)
         for name in Sample_Name_List:
             ws['X' + str(Paste_row)] = name
             Paste_row += 1
         
-#QuantityMean Calculation and write
+        #QuantityMean Calculation and write
         
         Paste_row = row_where_file_ends + 12 #Reset Paste_Row position
             
@@ -190,14 +245,14 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
             ws['Y' + str(Paste_row)] = Qty_mean_value
             Paste_row += 1
     
-#Replicate Diff
+        #Replicate Diff
         Paste_row = row_where_file_ends + 12 #Reset Paste_Row position
             
         Replicate_Differences = form10func.Replicate_Diff_Dataframe(form10)
         for value in Replicate_Differences['Ct diff']:
             ws['Z' + str(Paste_row)] = value
             Paste_row+=1
-#SPK Ct
+        #SPK Ct
         Paste_row = row_where_file_ends + 12 #Reset Paste_Row position
 
         if Sample_Name_List[0].startswith('A'):
@@ -210,13 +265,18 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
             ws['AC' + str(Paste_row)] = SPK_Ct['Inhibition?'][x]
             Paste_row += 1
 
-#SPK Control Information
+        #SPK Control Information
         Paste_row += 2
         ws['AA' + str(Paste_row)] = SPK_Ct['SPK Control Value'][0]
         ws['AA' + str(Paste_row)].font = Font(size = 13, bold = True)
 
 #Style Formatting
-        ws['U' + str(row_where_file_ends+1)] = 1 + len(Plate_Info_DF['Plate']) + file_count
+
+        print('plates ' + str(len(Plate_Info_DF['Plate'])))
+        print('filecount ' + str(file_count))
+        print(' ')
+        
+        ws['U' + str(row_where_file_ends+1)] = 1 + file_count + files_before
         ws['U' + str(row_where_file_ends+1)].font = Font(size = 16, bold = True)
         ws['U' + str(row_where_file_ends+1)].fill = PatternFill(start_color='00FFFF00',end_color='00FFFF00',fill_type='solid')
         ws['U' + str(row_where_file_ends+1)].alignment = Alignment(horizontal = 'center')
@@ -397,15 +457,9 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
                     
 
                     #Robust dumb method FOR PASTING RE RAN SAMPLES into DF, relies on date sort for accuracy
-                    Re_Run_Sample_Info_Dataframe.loc[Re_Run_Sample_Info_Index, 'Re_Run_Plate'] = data_file.split('\\')[-1][:-4]
-                    Re_Run_Sample_Info_Dataframe.loc[Re_Run_Sample_Info_Index, 'Re_Run_Samples'] = C_name_with_no_plus_SPK
+                    Re_Run_Sample_Info_Dataframe.iloc[Re_Run_Sample_Info_Index, 3] = data_file.split('\\')[-1][:-4]
+                    Re_Run_Sample_Info_Dataframe.iloc[Re_Run_Sample_Info_Index, 4] = C_name_with_no_plus_SPK
                     
-
-                    #Non-robust method to compare C123_A number to C123_A number (Re_Run has higher A number)
-#                    if int(C_name_with_no_plus_SPK.split('_')[2][1:]) > int(Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'][Re_Run_Sample_Info_Index].split('_')[2][1:]):
-#                        Re_Run_Sample_Info_Dataframe['Re_Run_Plate'][Re_Run_Sample_Info_Index] = data_file.split('\\')[-1][:-4]
-#                        Re_Run_Sample_Info_Dataframe['Re_Run_Samples'][Re_Run_Sample_Info_Index] = C_name_with_no_plus_SPK
-
 
         Samples_with_replicate_diff_issue = []
         
@@ -427,14 +481,6 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
                 if len(plate_fail_reason) == 0:
                     if str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('S')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('N')) == False and str(Replicate_Differences['Sample Name'][Replicate_value_index].startswith('A')) == False:
                         Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Plate':data_file.split('\\')[-1][:-4],'Need_Re_Run_Samples':Replicate_Differences['Sample Name'][Replicate_value_index].split('+')[0],'Reason_Re_Run':'Replicate Difference'}, ignore_index=True)
-
-###########################################
-#                    Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Samples':Replicate_Differences['Sample Name'][Replicate_value_index]}, ignore_index=True)
-#                    Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Reason_Re_Run':'Replicate Difference'}, ignore_index=True)
-                                                       
-#                    Re_Run_Sample_Info_Dataframe['Need_Re_Run_Plate'] =  data_file.split('\\')[-1][:-4]
-#                    Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'] =  Replicate_Differences['Sample Name'][Replicate_value_index]
-#                    Re_Run_Sample_Info_Dataframe['Reason_Re_Run'] =  'Replicate Difference'
 
 
 #Samples needing re-run from Plate Failiures
@@ -461,13 +507,6 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
                 if len(plate_fail_reason) == 0:
                     Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Plate':data_file.split('\\')[-1][:-4],'Need_Re_Run_Samples':SPK_Ct['Sample Names'][Inhibited_Sample_Index].split('+')[0],'Reason_Re_Run':'Inhibited'}, ignore_index=True)
 
-##############################################
-#                Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Samples':SPK_Ct['SPK Names'][SampleIndex]}, ignore_index=True)
-#                Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Reason_Re_Run':'Inhibited'}, ignore_index=True)
-
-#                Re_Run_Sample_Info_Dataframe['Need_Re_Run_Plate'] =  data_file.split('\\')[-1][:-4]
-#                Re_Run_Sample_Info_Dataframe['Need_Re_Run_Samples'] =  SPK_Ct['SPK Names'][SampleIndex]
-#                Re_Run_Sample_Info_Dataframe['Reason_Re_Run'] =  'Inhibited'
        
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
         
@@ -497,10 +536,6 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     for r in dataframe_to_rows(Re_Run_Sample_Info_Dataframe, index=False, header=True):
         re_run_samples_ws.append(r)
             
-#        with open(Data_Directory_Path + '\\' + 'all_Re_Run_Sample_Info.txt', newline='') as Re_Run_Sample_Info:
-#            dfAsString = Re_Run_Sample_Info_Dataframe.to_string(header=True, index=False)
-#            Re_Run_Sample_Info.write(dfAsString)
-#        Re_Run_Sample_Info.close()
 
 
 #Set Column Width for Readability
@@ -535,14 +570,9 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     if excel_file_exists == False: #First-Result Back Up
         shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
 
-#Set the parameters for the Program
-        
-Data_Directory_Path = r"C:\Users\efu\Desktop\Data_with_Re_Runs"
-Excel_File_Name = 'Book1.xlsx'
-SlopeMin = -3.7
-SlopeMax = -3.1
-LOD = 35
-R2 = .998
+
+    
+#Run the Program
 
 execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2)
 print('Done')
