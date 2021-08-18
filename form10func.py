@@ -1,15 +1,20 @@
 #Calculations Performed on Form10 QPCR Data
 import pandas as pd
+import math
+
+
 
 
 #Extract Sample Names
-
 def Get_Sample_Names(form10):
+    
     Sample_Name_List = []
-    for x in range(1,len(form10)-1):
+    for x in range(1,len(form10)):
         if (form10['Sample Name'][x]) == (form10['Sample Name'][x-1]):
             Sample_Name_List.append(form10['Sample Name'][x])
+
     return Sample_Name_List
+
 
 
 
@@ -20,8 +25,12 @@ def QuantityMean(form10):
     Quantity_Mean_List = []
     
     for x in range(1,len(form10)-1):
+        
         if str(form10['Sample Name'][x]).startswith('ST') == True:
             break
+        if str(form10['Sample Name'][x]).startswith('Titer') == True:
+            break
+        
         if (form10['Sample Name'][x]) == (form10['Sample Name'][x-1]):
             Quantity_Mean_List.append(form10['Qty Mean'][x])
             
@@ -40,12 +49,18 @@ def QtyMean_Dataframe(form10):
     
     for x in range(1,len(form10)-1):
         
-        if (form10['Sample Name'][x]) == (form10['Sample Name'][x-1]) and str(form10['Sample Name'][x]).startswith('ST') == False:
-            QtyMean_List.append((form10['Quantity'][x])+(form10.Quantity[x-1])/ 2)
+        if (form10['Sample Name'][x]) == (form10['Sample Name'][x-1]) and str(form10['Sample Name'][x]).startswith('S') == False and str(form10['Sample Name'][x]).startswith('N') == False:
+
+            
+
+            QtyMean_List.append(float(form10['Quantity'][x])+float(form10['Quantity'][x-1])/ 2)
             Sample_names_list.append(form10['Sample Name'][x])
 
         if (form10['Sample Name'][x]) == 'NTC' and (form10['Sample Name'][x-1]) == 'NTC':
-            Qty_Means['NTC'] = (form10['Quantity'][x]+form10['Quantity'][x-1])/2
+            if form10['Quantity'][x] == 'Undetermined' or math.isnan(form10['Quantity'][x]):
+                Qty_Means['NTC'] = 'Undetermined'
+            else:
+                Qty_Means['NTC'] = (form10['Quantity'][x]+form10['Quantity'][x-1])/2
         
     Qty_Means['Sample Names'] = Sample_names_list
     Qty_Means['Qty Mean'] = QtyMean_List
@@ -78,7 +93,7 @@ def SPK_Ct_dataframe(form10):
     #Extracting +SPK Information
     for x in range(0,len(form10)):
         
-        if '+SPK' in str(form10['Sample Name'][x]):
+        if '+SPK' in str(form10['Sample Name'][x]) or '+spk' in str(form10['Sample Name'][x]):
             SPK_names.append(form10['Sample Name'][x])
             SPK_values.append(form10['Ct'][x])
 
