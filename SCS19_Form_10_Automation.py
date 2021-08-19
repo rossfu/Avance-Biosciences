@@ -18,7 +18,7 @@ import QuantStudioModule
 
 
         
-Data_Directory_Path = r"C:\Users\efu\Desktop\Data_With_Re_Runs"
+Data_Directory_Path = r"C:\Users\efu\Desktop\Data_With_Re_Runs\test"
 Excel_File_Name = 'Book1.xlsx'
 SlopeMin = -3.7
 SlopeMax = -3.1
@@ -49,7 +49,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
                 file_path_list.sort(key=os.path.getmtime)
             
             if names.startswith('Form10_BackUp'):
-                Backup_Filename = names
+                Backup_Filename = os.path.join(root,names)
                 backup_file_exists = True
 
     file_count = 0
@@ -151,10 +151,8 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 #Iterate over every file
         
     for data_file in file_path_list:
-        
-        print(data_file.split('\\')[-1] + ' is on')
 
-        
+                
 #Test the Data file
 
         test = pd.read_csv(data_file, sep = '\t', skip_blank_lines = False, usecols = [0])
@@ -167,7 +165,8 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         else:
 
             wb.save(workbook_path)
-            
+
+            print('')
             print('Processing Quant Studio File: ' + data_file.split('\\')[-1])
 
             #Run QuantStudio function
@@ -188,6 +187,8 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
             Re_Run_Sample_Info_Dataframe = pd.read_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep = '\t', lineterminator = '\n', header = 0)    
 
             Plate_Info_DF = pd.read_csv(Data_Directory_Path + '\\' + 'Plate_Information.txt', sep = '\t', lineterminator = '\r', header = 0)
+            #files_before doesn't reset
+            
             row_where_file_ends = Plate_Info_DF.File_Length.sum()
 
             continue
@@ -271,10 +272,6 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         ws['AA' + str(Paste_row)].font = Font(size = 13, bold = True)
 
 #Style Formatting
-
-        print('plates ' + str(len(Plate_Info_DF['Plate'])))
-        print('filecount ' + str(file_count))
-        print(' ')
         
         ws['U' + str(row_where_file_ends+1)] = 1 + file_count + files_before
         ws['U' + str(row_where_file_ends+1)].font = Font(size = 16, bold = True)
@@ -533,12 +530,23 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
                         
         Re_Run_Sample_Info_Dataframe.to_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep='\t', index = False, header = True)
 
-    for r in dataframe_to_rows(Re_Run_Sample_Info_Dataframe, index=False, header=True):
-        re_run_samples_ws.append(r)
+    if files_before == 0:
+        for r in dataframe_to_rows(Re_Run_Sample_Info_Dataframe, index=False, header=True):
+            re_run_samples_ws.append(r)
+    else:
+        
+        del wb['Re Run Samples']
+        re_run_samples_ws = wb.create_sheet('Re Run Samples')
+        
+        for r in dataframe_to_rows(Re_Run_Sample_Info_Dataframe, index=False, header=True):
+            re_run_samples_ws.append(r)
             
 
 
 #Set Column Width for Readability
+
+    ws.column_dimensions['B'].width = 22
+    ws.column_dimensions['X'].width = 17
 
     plate_report_ws.column_dimensions['A'].width = 11
     plate_report_ws.column_dimensions['B'].width = 14
@@ -567,8 +575,8 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     
     wb.save(workbook_path)
     
-    if excel_file_exists == False: #First-Result Back Up
-        shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+    #Save Back Up File
+    shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
 
 
     
