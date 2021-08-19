@@ -85,7 +85,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
     ws = wb['Form10_Raw Data']
 
-    if 'Plate Report' in wb.sheetnames and files_before > 0:
+    if 'Plate Report' in wb.sheetnames and files_before > 0 and file_count == 0:
         del wb['Plate Report']
         plate_report_ws = wb.create_sheet('Plate Report')
 
@@ -132,29 +132,57 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
     if Data_exists == False:
         
-        print("Theres no Data in this Quant Studio File, Plate " + str(file_count+1) + " will be empty")
+        print("Theres no Data in this Quant Studio File, Plate " + str(file_count+files_before+1) + " will be empty")
         print('')
         
         if row_where_file_ends == 0:
-            ws['U' + str(row_where_file_ends+1)] = str(1 + file_count + files_before) + ' :'
+            ws['U' + str(row_where_file_ends+1)] = str(1 + file_count + files_before)
             ws['U' + str(row_where_file_ends+1)].border = Border(bottom = Side(style = 'medium'))
             ws['U' + str(row_where_file_ends+1)].font = Font(size = 16, bold = True)
             ws['U' + str(row_where_file_ends+1)].fill = PatternFill(start_color='00FFFF00',end_color='00FFFF00',fill_type='solid')
             ws['U' + str(row_where_file_ends+1)].alignment = Alignment(horizontal = 'center')
-            row_where_file_ends += 1
             ws['V' + str(row_where_file_ends+1)] = 'Empty Quant Studio File'
+            ws['V' + str(row_where_file_ends+1)].font = Font(bold = True)
+
+            row_where_file_ends += 1 #Avoid error of pasting into row 0
 
             with open(Data_Directory_Path + '\\' + 'Plate_Information.txt', 'a', newline = '\r') as Plate_Information:
                 Plate_Information.write('\n'+data_file.split('\\')[-1][:-4]+'\t'+str(now.strftime('%Y-%m-%d %H:%M'))+'\t'+str(1))
             Plate_Information.close()
 
+            #Plate Report
+
+            Paste_row = file_count * 40 + 1 #Reset Paste_Row position
+        
+            plate_report_ws['A'+ str(Paste_row)] = 'Plate ' + str(file_count+1)
+            plate_report_ws['A' + str(Paste_row+1)] = data_file.split('\\')[-1][:-4]
+            plate_report_ws['A'+ str(Paste_row+1)].font = Font(bold = True)
+            plate_report_ws['A'+ str(Paste_row)].font = Font(bold = True)
+            plate_report_ws['B'+ str(Paste_row)] = 'Re-Run Status'
+            plate_report_ws['B'+ str(Paste_row+1)].fill = PatternFill(start_color='00FF0000',end_color='00FF0000',fill_type='solid')
+            plate_report_ws['D'+ str(Paste_row)] = 'Reason'
+            plate_report_ws['D'+ str(Paste_row+1)] = 'Empty Quant Studio File'
+
         else:
-            ws['U' + str(row_where_file_ends)] = str(1 + file_count + files_before) + ':'
+            ws['U' + str(row_where_file_ends)] = str(1 + file_count + files_before)
             ws['U' + str(row_where_file_ends)].border = Border(bottom = Side(style = 'medium'))
             ws['U' + str(row_where_file_ends)].font = Font(size = 16, bold = True)
             ws['U' + str(row_where_file_ends)].fill = PatternFill(start_color='00FFFF00',end_color='00FFFF00',fill_type='solid')
             ws['U' + str(row_where_file_ends)].alignment = Alignment(horizontal = 'center')
             ws['V' + str(row_where_file_ends)] = 'Empty Quant Studio File'
+
+            #Plate Report
+
+            Paste_row = file_count * 40 + 1 #Reset Paste_Row position
+        
+            plate_report_ws['A'+ str(Paste_row)] = 'Plate ' + str(file_count+1)
+            plate_report_ws['A' + str(Paste_row+1)] = data_file.split('\\')[-1][:-4]
+            plate_report_ws['A'+ str(Paste_row+1)].font = Font(bold = True)
+            plate_report_ws['A'+ str(Paste_row)].font = Font(bold = True)
+            plate_report_ws['B'+ str(Paste_row)] = 'Re-Run Status'
+            plate_report_ws['B'+ str(Paste_row+1)].fill = PatternFill(start_color='00FF0000',end_color='00FF0000',fill_type='solid')
+            plate_report_ws['D'+ str(Paste_row)] = 'Reason'
+            plate_report_ws['D'+ str(Paste_row+1)] = 'Empty Quant Studio File'
 
         wb.save(workbook_path)
         
@@ -217,7 +245,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
             ws.append(r)
 
         print('Quant Studio file ' + data_file + ' is written')
-
+        print('')
 
 #Add File Information to PlateInformation.txt; Info not contained in Plate_Info_DF however
         
@@ -292,9 +320,6 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
 #Style Formatting
 
-        print('plates ' + str(len(Plate_Info_DF['Plate'])))
-        print('filecount ' + str(file_count))
-        print(' ')
         
         ws['U' + str(row_where_file_ends+1)] = 1 + file_count + files_before
         ws['U' + str(row_where_file_ends+1)].font = Font(size = 16, bold = True)
@@ -563,17 +588,3 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 #Run Program
 
 #Run_Quant_Studio_Form10(Data_Directory_Path, Excel_File_Name, file_count, SlopeMin, SlopeMax, LOD, R2)
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
