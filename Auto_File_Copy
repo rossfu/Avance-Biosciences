@@ -1,0 +1,137 @@
+import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import shutil
+from hashlib import sha256
+import os
+import pandas as pd
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+
+
+
+
+#Set Up
+
+src = r'C:\Users\efu\Desktop\watchdog_test'
+dst = r'C:\Users\efu\Desktop\watchdog_test_destination'
+
+
+
+File_Copying_Records_exists = False
+
+for root,dirs,files in os.walk(src):
+    for names in files:
+        if names.startswith('File_Copying_Records'):
+            File_Copying_Records_exists == True
+
+
+    
+if File_Copying_Records_exists == False: #Create File_Copying_Records.txt
+    with open(dst + '\\' + 'File_Copying_Records.txt', 'w', newline='') as File_Copying_Records:
+        File_Copying_Records.write('Version\tFile_Path\tSHA256Hash#')
+    File_Copying_Records.close()
+
+
+
+
+
+#WatchDog
+class OnMyWatch:
+    
+    # Set the directory on watch
+    watchDirectory = src
+
+    def __init__(self):
+        self.observer = Observer()
+
+    def run(self):
+        event_handler = Handler()
+        self.observer.schedule(event_handler, self.watchDirectory, recursive = True)
+        self.observer.start()
+        try:
+            while True:
+                time.sleep(5)
+        except:
+            self.observer.stop()
+            print("Observer Stopped")
+
+        self.observer.join()
+
+print('Monitoring ' + src)
+
+class Handler(FileSystemEventHandler):
+
+    @staticmethod
+    def on_any_event(event):
+        if event.is_directory:
+            return None
+
+        elif event.event_type == 'created' and event.src_path.split('.')[-1] == 'txt':
+
+            File_Copying_Records_DF = pd.read_csv(dst + '\\' + 'File_Copying_Records.txt', sep = '\t', lineterminator = '\n', header = 0)    
+            
+            print(' ')
+            
+            # Event is created, you can process it now
+            print("File was Created (and copied): % s." % event.src_path)
+
+            shutil.copy(event.src_path, dst)
+
+
+#Record event
+
+    #Original Hash
+            with open(event.src_path, 'r') as original_file:
+                original_text = original_file.read()
+            original_file.close()
+
+            orig_encoded_text = original_text.encode()
+            orig_hash = sha256(orig_encoded_text).hexdigest()
+
+            File_Copying_Records_DF = File_Copying_Records_DF.append({'Version': 'Original', 'File_Path': event.src_path, 'SHA256Hash#': orig_hash}, ignore_index=True)
+
+
+            with open(dst + '\\' + 'File_Copying_Records.txt', 'a', newline='') as File_Copying_Records:
+                File_Copying_Records.write('\nOriginal\t' + event.src_path + '\t' + orig_hash)
+            File_Copying_Records.close()
+                                           
+    #Copy File Hash
+            with open(dst + '\\' + event.src_path.split('\\')[-1], 'r') as copy_file:
+                copy_file_text = copy_file.read()
+            copy_file.close()
+
+            copy_file_encoded_text = copy_file_text.encode()
+            copy_file_hash = sha256(copy_file_encoded_text).hexdigest()
+
+            
+            File_Copying_Records_DF = File_Copying_Records_DF.append({'Version': 'Copy', 'File_Path': dst + event.src_path.split('\\')[-1], 'SHA256Hash#': copy_file_hash}, ignore_index=True)
+
+            with open(dst + '\\' + 'File_Copying_Records.txt', 'a', newline='') as File_Copying_Records:
+                File_Copying_Records.write('\nCopy\t' + dst + '\\' + event.src_path.split('\\')[-1] + '\t' + copy_file_hash)
+            File_Copying_Records.close()
+
+            
+    #Print
+            File_Copying_Records_DF.to_csv(dst + '\\' + 'File_Copying_Records_From_DF.txt', sep='\t', index = False, header = True)
+
+            wb = Workbook()
+            ws = wb.active
+
+            for r in dataframe_to_rows(File_Copying_Records_DF, index=False, header=True):
+                ws.append(r)
+
+            ws.column_dimensions['B'].width = 65
+            ws.column_dimensions['C'].width = 65
+
+            wb.save(dst + '\\File_Copying_Records.xlsx')
+
+            print('Original SHA_256_Hash #_: ' + orig_hash)
+            print('Copy File SHA_256_Hash #: ' + copy_file_hash)
+
+            
+
+
+if __name__ == '__main__':
+    watch = OnMyWatch()
+    watch.run()
