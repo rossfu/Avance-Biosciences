@@ -1,2 +1,4 @@
 # Avance-Biosciences
-Python program for the purpose of automating the extraction of raw data and filling of SCS19 Form 10.
+A Collection of Python Scripts for the purpose of Automating certain workflow elements at Avance Biosciences
+-Form10
+-AutoFileCopy
