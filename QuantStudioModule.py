@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 import form10func
+import csv
 
 
 
@@ -50,7 +51,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
             Re_Run_Sample_Info_Exists = True
 
     if Plate_Info_Exists == False: #Create Plate_Information.txt
-        with open(Data_Directory_Path + '\\' + 'Plate_Information.txt', 'w', newline='') as Plate_Information:
+        with open(Data_Directory_Path + '\\' + 'Plate_Information.txt', 'w', newline = '\r') as Plate_Information:
             Plate_Information.write('Plate\tDate_Processed\tFile_Length')
         Plate_Information.close()
         
@@ -60,7 +61,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 #Read Re_Run_Sample_Info.txt into Dataframe, append dataframe, save as .txt:
     
     if Re_Run_Sample_Info_Exists == False: #Create Re_Run_Sample_Info.txt
-        with open(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', 'w', newline='') as Re_Run_Sample_Info:
+        with open(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', 'w') as Re_Run_Sample_Info:
             Re_Run_Sample_Info.write('Need_Re_Run_Plate\tNeed_Re_Run_Samples\tReason_Re_Run\tRe_Run_Plate\tRe_Run_Samples')
         Re_Run_Sample_Info.close()
 
@@ -69,7 +70,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
     
 #Initialize starting row variable
 
-    row_where_file_ends = Plate_Info_DF.File_Length.sum()
+    row_where_file_ends = len(Plate_Info_DF.File_Length) * 109
 
 #Set Up Excel
         
@@ -233,16 +234,59 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
         Footer = pd.DataFrame()
         Footer = Footer.append([' ',' '])
 
-#Write Data to Excel
+#Create Modified Quant Studio File
+
+        Header.to_csv(Data_Directory_Path + 'MODIFIED_QUANTSTUDIO_FILE_' + data_file.split('\\')[-1], sep = '\t', mode='w',index=False, quoting=csv.QUOTE_NONE, quotechar='',  escapechar='$')
+        form10.to_csv(Data_Directory_Path + 'MODIFIED_QUANTSTUDIO_FILE_' + data_file.split('\\')[-1], sep = '\t', mode='a',index=False, quoting=csv.QUOTE_NONE, quotechar='',  escapechar='$')
+        Footer.to_csv(Data_Directory_Path + 'MODIFIED_QUANTSTUDIO_FILE_' + data_file.split('\\')[-1], sep = '\t', mode='a',index=False, quoting=csv.QUOTE_NONE, quotechar='',  escapechar='$')
         
-        for r in dataframe_to_rows(Header, index=False, header=False):
-            ws.append(r)
 
-        for r in dataframe_to_rows(form10_full, index=False, header=True):
-            ws.append(r)
+#Write Data to Excel
 
-        for r in dataframe_to_rows(Footer, index=False, header=False):
-            ws.append(r)
+        open_data_file = open(Data_Directory_Path + 'MODIFIED_QUANTSTUDIO_FILE_' + data_file.split('\\')[-1], 'r')
+        
+        currentRow = (file_count + files_before) * 109 + 1
+        currentCell = None
+   
+        currentCol = 2
+
+        while True:
+            
+            line = open_data_file.readline()
+
+            if not line:
+                break
+
+            if line in ['\n', '\r', '\r\n'] or line.startswith('NAP'):
+                continue
+
+            fields = line.split("\t") #separate line by tabs into up to 34 cells
+            for fieldIndex in range(len(fields)): #copy up to 21 cells in each line
+            
+                currentCell = ws.cell(row=currentRow, column=currentCol)
+
+                if fields[fieldIndex]: #only try to copy field if it has a value
+                    if (fields[fieldIndex][0].isdigit() or fields[fieldIndex].startswith("-")): #set cell value as a float if it begins with a number or a "-"
+
+                        try: #copy value as a float
+                            currentCell.value = float(fields[fieldIndex])
+
+                        except: #copy value as text
+                            currentCell.value = fields[fieldIndex]
+
+                    else: #copy value as text
+                        currentCell.value = fields[fieldIndex]
+
+                currentCol += 1
+
+                if (currentCol == 23 or fieldIndex == len(fields)-1): #move to the next row in sheet after 21 columns or at the end of the row
+                    currentCol = 2
+                    currentRow += 1
+                    break
+
+
+        open_data_file.close()
+            
 
         print('Quant Studio file ' + data_file + ' is written')
         print('')
@@ -258,7 +302,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
         
         
         #Manage Paste Offset
-        Paste_row = row_where_file_ends + 12
+        Paste_row = row_where_file_ends + 19
 
         #Paste Calculation Header
         ws['X' + str(Paste_row-1)] = 'Sample Name'
@@ -281,7 +325,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
         #QuantityMean Calculation and write
             
-        Paste_row = row_where_file_ends + 12 #Reset Paste_Row position
+        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
             
         QuantityMeans = form10func.QtyMean_Dataframe(form10)
         for Qty_mean_value in QuantityMeans['Qty Mean']:
@@ -291,7 +335,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
     
         #Replicate Diff
             
-        Paste_row = row_where_file_ends + 12 #Reset Paste_Row position
+        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
             
         Replicate_Differences = form10func.Replicate_Diff_Dataframe(form10)
         for value in Replicate_Differences['Ct diff']:
@@ -301,7 +345,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
                                   
         #SPK Ct
             
-        Paste_row = row_where_file_ends + 12 #Reset Paste_Row position
+        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
 
         if Sample_Name_List[0].startswith('A'):
             Paste_row += 1
@@ -321,12 +365,12 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 #Style Formatting
 
         
-        ws['U' + str(row_where_file_ends+1)] = 1 + file_count + files_before
-        ws['U' + str(row_where_file_ends+1)].font = Font(size = 16, bold = True)
-        ws['U' + str(row_where_file_ends+1)].fill = PatternFill(start_color='00FFFF00',end_color='00FFFF00',fill_type='solid')
-        ws['U' + str(row_where_file_ends+1)].alignment = Alignment(horizontal = 'center')
+        #ws['U' + str(row_where_file_ends+1)] = 1 + file_count + files_before
+        #ws['U' + str(row_where_file_ends+1)].font = Font(size = 16, bold = True)
+        #ws['U' + str(row_where_file_ends+1)].fill = PatternFill(start_color='00FFFF00',end_color='00FFFF00',fill_type='solid')
+        #ws['U' + str(row_where_file_ends+1)].alignment = Alignment(horizontal = 'center')
 
-        row_where_file_ends = row_where_file_ends + len(form10_full) + len(Header) + len(Footer)
+        row_where_file_ends = row_where_file_ends + 109
 
 ##############################################################################################################################
 
@@ -399,7 +443,7 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 #ReRun Status
 
         re_run_status = 'green'
-        re_run_samples = 'not yet'
+        re_run_samples_replicates = 'not yet'
         re_run_samples_inhib = 'not yet'
 
         #Status Color Indicator Default is Green
@@ -488,12 +532,12 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
 
+##########################################################################################
 
-
-#Re_Run_Samples Report and .txt Information
+#Re_Run_Samples Report
 
     
-        #Connect Samples that were re_run with their former selves.
+    #Connect Samples that were re_run with their former selves.
         for C_name in SPK_Ct['Sample Names']:
             C_name_with_no_plus_SPK = C_name.split('+')[0]
             C_num = C_name.split('_')[0]
@@ -504,18 +548,21 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
                     #Robust dumb method FOR PASTING RE RAN SAMPLES into DF, relies on date sort for accuracy
                     Re_Run_Sample_Info_Dataframe.iloc[Re_Run_Sample_Info_Index, 3] = data_file.split('\\')[-1][:-4]
                     Re_Run_Sample_Info_Dataframe.iloc[Re_Run_Sample_Info_Index, 4] = C_name_with_no_plus_SPK
-                    
+
+                   
+    #Samples needing re-run from Replicate Difference 
 
         Samples_with_replicate_diff_issue = []
+        replicate_diff_issue_samples = []
         
         for Replicate_value_index in range(0,len(Replicate_Differences)):
             if str(Replicate_Differences['Ct diff'][Replicate_value_index]).startswith('PROBLEM'):
                     
-                Samples_with_replicate_diff_issue.append(Replicate_Differences['Sample Name'][Replicate_value_index])
-                plate_report_ws['C' + str(Paste_row+6)] = ', '.join(Samples_with_replicate_diff_issue) #paste into 1 cell
+                Reporting_Samples_with_replicate_diff_issue.append(Replicate_Differences['Sample Name'][Replicate_value_index])
+                plate_report_ws['C' + str(Paste_row+6)] = ', '.join(Reporting_Samples_with_replicate_diff_issue) #paste into 1 cell
                 plate_report_ws['D'+ str(Paste_row+6)] = 'Replicate Difference'
                 
-                re_run_samples = 'true'
+                re_run_samples_replicates = 'true'
                 re_run_status = 'red'
                 Paste_row += 1
 
@@ -530,14 +577,17 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
 
 
-#Samples needing re-run from Plate Failiures
+    #Samples needing re-run from Plate Failiures
         if len(plate_fail_reason) > 0:
             for i in range(0,len(SPK_Ct)):
                 Re_Run_Sample_Info_Dataframe = Re_Run_Sample_Info_Dataframe.append({'Need_Re_Run_Plate':data_file.split('\\')[-1][:-4],'Need_Re_Run_Samples':SPK_Ct['Sample Names'][i].split('+')[0],'Reason_Re_Run': ', '.join(plate_fail_reason) + ' Failed'}, ignore_index=True)
 
         Paste_row = file_count * 40 + 1 #Reset Paste_Row position
-        
-        
+
+
+    #Samples needing re-run from Inhibition
+
+        inhibited_samples = []
         for Inhibited_Sample_Index in range(0,len(SPK_Ct['Inhibition?'])):        
 
             if SPK_Ct['Inhibition?'][Inhibited_Sample_Index] == 'True':
@@ -559,10 +609,10 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
         
 
         #Status
-        if re_run_samples == 'true':
+        if re_run_samples_replicates == 'true':
                 plate_report_ws['B'+ str(Paste_row+6)] = 'Re-run Samples'
 
-        if re_run_samples_inhib == 'true' and re_run_samples == 'not yet':
+        if re_run_samples_inhib == 'true' and re_run_samples_replicates == 'not yet':
                 plate_report_ws['B'+ str(Paste_row+7)] = 'Re-run Samples'
 
         if re_run_status == 'red':
@@ -572,10 +622,39 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
                 if x.startswith('S') == False:
                         plate_report_ws['D' + str(Paste_row+1)] = 'Re-Run with a STD removed'
 
+#Listing healthy samples                       
+        healthy_samples = []
+        healthy_samples_DF = pd.DataFrame(columns = ['Plate', 'Sample Names', 'Qty Mean'])
 
+        
+        if re_run_samples_replicates == 'not yet' and re_run_samples_inhib == 'not yet' and re_run_status == 'green':
+
+            #Healthy plate, all samples
+            for i in range(len(QuantityMeans['Sample Names'])):
+                if QuantityMeans['Sample Names'][i].startswith('C'):
+                    
+                    healthy_samples.append(QuantityMeans['Sample Names'][i])
+                    healthy_samples_DF.append({'Plate':data_file.split('\\')[-1][:-4], 'Sample Names': QuantityMeans['Sample Names'][i], 'Qty Mean': QuantityMeans['Qty Mean'][i]}, ignore_index=True)
+        else:
+            
+            for sample_name in healthy_samples:
+                if sample_name in inhibited_samples or sample_name in replicate_diff_issue_samples: 
+                    healthy_samples.remove(sample_name)
+
+                else:
+                    healthy_samples_DF.append({'Plate':data_file.split('\\')[-1][:-4],'Sample Names': sample_name, 'Qty Mean': QuantityMeans.loc[QuantityMeans['Sample Names'] == sample_name, ['Qty Mean']]})
+
+
+        Paste_row = file_count * 40 + 1 #Reset Paste_Row position
+                                           
+        for i in range(len(healthy_samples_DF)):
+            plate_report_ws['R' + str(Paste_row+1)] = healthy_samples_DF['Sample Names'][i]
+            plate_report_ws['S' + str(Paste_row+1)] = healthy_samples_DF['Qty Mean'][i]
+            Paste_row += 1
+            
 #Save Re Run Sample Info
                         
-        Re_Run_Sample_Info_Dataframe.to_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep='\t', index = False, header = True)
+        Re_Run_Sample_Info_Dataframe.to_csv(Data_Directory_Path + '\\' + 'Re_Run_Sample_Info.txt', sep='\t', index = False, header = True, line_terminator = '\n', quoting=csv.QUOTE_NONE, quotechar='',  escapechar='$')
 
        
 #Save!
@@ -588,3 +667,17 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 #Run Program
 
 #Run_Quant_Studio_Form10(Data_Directory_Path, Excel_File_Name, file_count, SlopeMin, SlopeMax, LOD, R2)
+
+
+
+
+
+
+
+
+
+
+
+
+        
+
