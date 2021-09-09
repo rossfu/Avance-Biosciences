@@ -10,6 +10,7 @@ from datetime import datetime
 import form10func
 import QuantStudioModule_TemplateMode
 import csv
+import sys
 
 
 
@@ -19,13 +20,22 @@ import csv
 
 
         
-Data_Directory_Path = r"C:\Users\efu\Desktop\TestData"
-Excel_File_Name = 'EricFu_19Template_EmptyForm10.xlsx'
-SlopeMin = -3.7
-SlopeMax = -3.1
-LOD = 35
-R2 = .998
+#Data_Directory_Path = r"C:\Users\efu\Desktop\TestData"
+#Excel_File_Name = 'EricFu_19Template_EmptyForm10_Macro.xlsm'
+#SlopeMin = -3.7
+#SlopeMax = -3.1
+#LOD = 35
+#R2 = .998
 
+SlopeMin = float(sys.argv[3])
+SlopeMax = float(sys.argv[4])
+LOD = float(sys.argv[5])
+R2 = float(sys.argv[6])
+
+SlopeMin = float(SlopeMin)
+SlopeMax = float(SlopeMax)
+LOD = float(LOD)
+R2 = float(R2)
 
 
 
@@ -110,13 +120,14 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     workbook_path = Data_Directory_Path + '\\' + Excel_File_Name
 
     if excel_file_exists == True:
-        wb = load_workbook(workbook_path)
+        wb = load_workbook(workbook_path, keep_vba=True)
     else:
 
-        #SCS TEMPLATE LOCATED HERE (Not DATA_DIRECTORY_PATH)
-        wb = load_workbook(r'C:\Users\efu\Documents' + '\\' + Excel_File_Name)
-        sheet = wb.active
-        sheet.title = 'Form10_Raw Data'
+        #SCS TEMPLATE LOCATION (Not DATA_DIRECTORY_PATH)-saves an excel to data directory
+        wb_init = load_workbook(r'C:\Users\efu\Documents' + '\\' + Excel_File_Name, keep_vba=True)
+        wb_init.save(workbook_path)
+
+        wb = load_workbook(workbook_path, keep_vba=True)
         ws = wb['Form10_Raw Data']
 
     ws = wb['Form10_Raw Data']
@@ -131,6 +142,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
     else:
         re_run_samples_ws = wb.create_sheet('Re Run Samples')
 
+
     
 #Create Back-Up Project File
     
@@ -138,10 +150,10 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 
     if excel_file_exists == True: #Preserve Current File
         if backup_file_exists == True:
-            os.rename(Backup_Filename, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
-            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+            os.rename(Backup_Filename, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
         else:
-            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
       
 
 #Eliminate the 1 row off issue and Welcome the next batch
@@ -184,7 +196,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 
             file_count += 1
             
-            wb = load_workbook(workbook_path)
+            wb = load_workbook(workbook_path, keep_vba=True)
 
             ws = wb['Form10_Raw Data']
             plate_report_ws = wb['Plate Report']
@@ -268,7 +280,17 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         
         #Manage Paste Offset
 
-        Paste_row = row_where_file_ends + 19
+        Paste_row = row_where_file_ends + 20
+
+        Sample_Name_List = form10func.Get_Sample_Names(form10)
+
+        AC_exist = False
+        for name in Sample_Name_List:
+            if name.startswith('AC'):
+                Paste_row -= 1
+                AC_exist = True
+                break
+        
 
         #Paste Calculation Header
         
@@ -283,30 +305,41 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         ws['AC' + str(Paste_row-1)] = 'Inhibition?'
         
         #Paste Sample Names
-        Sample_Name_List = form10func.Get_Sample_Names(form10)
+        
+        #Sample_Name_List = form10func.Get_Sample_Names(form10)
         for name in Sample_Name_List:
             ws['X' + str(Paste_row)] = name
             Paste_row += 1
         
         #QuantityMean Calculation and write
         
-        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
-            
+        Paste_row = row_where_file_ends + 20 #Reset Paste_Row position
+
+        if AC_exist == True:
+            Paste_row -= 1
+         
         QuantityMeans = form10func.QtyMean_Dataframe(form10)
         for Qty_mean_value in QuantityMeans['Qty Mean']:
             ws['Y' + str(Paste_row)] = Qty_mean_value
             Paste_row += 1
     
         #Replicate Diff
-        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
+        Paste_row = row_where_file_ends + 20 #Reset Paste_Row position
+
+        if AC_exist == True:
+            Paste_row -= 1
             
         Replicate_Differences = form10func.Replicate_Diff_Dataframe(form10)
         for value in Replicate_Differences['Ct diff']:
             ws['Z' + str(Paste_row)] = value
             Paste_row+=1
+            
         #SPK Ct
-        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
+        Paste_row = row_where_file_ends + 20 #Reset Paste_Row position
 
+        if AC_exist == True:
+            Paste_row -= 1
+            
         if Sample_Name_List[0].startswith('A'):
             Paste_row += 1
         
@@ -467,12 +500,12 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
         else:
             plate_report_ws['O' + str(Paste_row+2)] = 'Undetermined'
 
-        if float(form10.iloc[-8,1]) < SlopeMin:
+        if float(form10.iloc[-8,1]) < float(SlopeMin):
             plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
             plate_report_ws['D'+ str(Paste_row+3)] = 'Slope Requirement'
             plate_fail_reason.append('Slope Requirement')
             re_run_status = 'red'
-        if float(form10.iloc[-8,1]) > SlopeMax:
+        if float(form10.iloc[-8,1]) > float(SlopeMax):
             plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
             plate_report_ws['D'+ str(Paste_row+3)] = 'Slope Requirement'
             plate_fail_reason.append('Slope Requirement')
@@ -483,7 +516,7 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
                 plate_report_ws['D'+ str(Paste_row+4)] = 'R^2 Requirement'
                 plate_fail_reason.append('R2 Requirement')
                 re_run_status = 'red'
-        if QuantityMeans['NTC'][0] < LOD:
+        if QuantityMeans['NTC'][0] < float(LOD):
             plate_report_ws['B'+ str(Paste_row+2)] = 'Re-run Plate'
             plate_report_ws['D'+ str(Paste_row+5)] = 'NTC vs LOD Requirement'
             plate_fail_reason.append('NTC vs LOD Requirement')
@@ -671,13 +704,30 @@ def execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2):
 #Save!
     
     wb.save(workbook_path)
-    
+
+
     #Save Back Up File
-    shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+    
+    if excel_file_exists == True: #Preserve Current File
+        if backup_file_exists == True:
+            os.rename(Backup_Filename, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
+        else:
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
 
 
     
 #Run the Program
 
-execute(Data_Directory_Path, Excel_File_Name, SlopeMin, SlopeMax, LOD, R2)
+#CMD Line: python C:\Users\efu\Desktop\Python\SCS19AutoForm10_Excelver.py "1" "2" "3" "4" "5" "6"
+
+if __name__ == '__main__':
+    execute(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+
+    #Data_Directory_Path, Excel_File_Name, Slope_Min, Slope_Max, LOD, R2
+    
 print('Done')
+
+
+
+
