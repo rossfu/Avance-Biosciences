@@ -9,12 +9,21 @@ from pathlib import Path
 from datetime import datetime
 import form10func
 import csv
-
+import sys
 
 
 
 def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, file_count, files_before, SlopeMin, SlopeMax, LOD, R2):
 
+    SlopeMin = float(sys.argv[3])
+    SlopeMax = float(sys.argv[4])
+    LOD = float(sys.argv[5])
+    R2 = float(sys.argv[6])
+
+    SlopeMin = float(SlopeMin)
+    SlopeMax = float(SlopeMax)
+    LOD = float(LOD)
+    R2 = float(R2)
 
 #Find and Sort .TXT Raw Data Files
         
@@ -77,11 +86,14 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
     workbook_path = Data_Directory_Path + '\\' + Excel_File_Name
 
     if excel_file_exists == True:
-        wb = load_workbook(workbook_path)
+        wb = load_workbook(workbook_path, keep_vba=True)
     else:
-        wb = Workbook()
-        sheet = wb.active
-        sheet.title = 'Form10_Raw Data'
+
+        #SCS TEMPLATE LOCATION (Not DATA_DIRECTORY_PATH)-saves an excel to data directory
+        wb_init = load_workbook(r'C:\Users\efu\Documents' + '\\' + Excel_File_Name, keep_vba=True)
+        wb_init.save(workbook_path)
+
+        wb = load_workbook(workbook_path, keep_vba=True)
         ws = wb['Form10_Raw Data']
 
     ws = wb['Form10_Raw Data']
@@ -103,10 +115,10 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
     if excel_file_exists == True: #Preserve Current File
         if backup_file_exists == True:
-            os.rename(Backup_Filename,Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
-            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+            os.rename(Backup_Filename,Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
         else:
-            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
       
 
 #Eliminate the 1 row off issue and Welcome the next batch
@@ -302,7 +314,16 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
         
         
         #Manage Paste Offset
-        Paste_row = row_where_file_ends + 19
+        Paste_row = row_where_file_ends + 20
+
+        Sample_Name_List = form10func.Get_Sample_Names(form10)
+
+        AC_exist = False
+        for name in Sample_Name_List:
+            if name.startswith('AC'):
+                Paste_row -= 1
+                AC_exist = True
+                break
 
         #Paste Calculation Header
         ws['X' + str(Paste_row-1)] = 'Sample Name'
@@ -317,7 +338,8 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
 
         #Paste Sample Names
-        Sample_Name_List = form10func.Get_Sample_Names(form10)
+
+        #Sample_Name_List = form10func.Get_Sample_Names(form10)
         for name in Sample_Name_List:
             ws['X' + str(Paste_row)] = name
             Paste_row += 1
@@ -325,7 +347,10 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
         #QuantityMean Calculation and write
             
-        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
+        Paste_row = row_where_file_ends + 20 #Reset Paste_Row position
+
+        if AC_exist == True:
+            Paste_row -= 1
             
         QuantityMeans = form10func.QtyMean_Dataframe(form10)
         for Qty_mean_value in QuantityMeans['Qty Mean']:
@@ -335,7 +360,9 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
     
         #Replicate Diff
             
-        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
+        Paste_row = row_where_file_ends + 20 #Reset Paste_Row position
+        if AC_exist == True:
+            Paste_row -= 1
             
         Replicate_Differences = form10func.Replicate_Diff_Dataframe(form10)
         for value in Replicate_Differences['Ct diff']:
@@ -345,8 +372,10 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
                                   
         #SPK Ct
             
-        Paste_row = row_where_file_ends + 19 #Reset Paste_Row position
-
+        Paste_row = row_where_file_ends + 20 #Reset Paste_Row position
+        if AC_exist == True:
+            Paste_row -= 1
+            
         if Sample_Name_List[0].startswith('A'):
             Paste_row += 1
         
@@ -658,11 +687,16 @@ def Run_Quant_Studio_Form10(Data_Directory_Path, data_file, Excel_File_Name, fil
 
        
 #Save!
-
-        wb.save(workbook_path)
+        
+    wb.save(workbook_path)
     
-        if excel_file_exists == False: #First-Result Back Up
-            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsx')
+    if excel_file_exists == True: #Preserve Current File
+        if backup_file_exists == True:
+            os.rename(Backup_Filename, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
+        else:
+            shutil.copyfile(Data_Directory_Path + '\\' + Excel_File_Name, Data_Directory_Path + '\\' + 'Form10_BackUp_' + Excel_File_Name[:-5] + '_' + str(now.strftime('%m-%d-%Y_time_%H_%M')) + '.xlsm')
+
 
 #Run Program
 
