@@ -1,137 +1,194 @@
-import time
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-import shutil
-from hashlib import sha256
 import os
+import csv
+import time
+import shutil
 import pandas as pd
-from openpyxl import Workbook, load_workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
-
+from hashlib import sha256
 
 
 
 #Set Up
 
-src = r'C:\Users\efu\Desktop\watchdog_test'
-dst = r'C:\Users\efu\Desktop\watchdog_test_destination'
+src = r'C:\Users\efu\Desktop\server1'
+dst = r'C:\Users\efu\Desktop\server2'
 
 
 
-File_Copying_Records_exists = False
+#Copy Function
 
-for root,dirs,files in os.walk(src):
-    for names in files:
-        if names.startswith('File_Copying_Records'):
-            File_Copying_Records_exists == True
+def Auto_Copy(root_src_dir, root_dst_dir):
 
+    print('#################################################################')
+    print('Copy Checking ' + root_src_dir + ' again')
+    print('')
+    
+    File_Copying_Records_exists = False
+
+    for root,dirs,files in os.walk(root_dst_dir):
+        for names in files:
+            if names == 'File_Copying_Records.txt':
+                File_Copying_Records_exists = True
+
+
+#Create File_Copying_Records.txt
+            
+    if File_Copying_Records_exists == False:
+        with open(root_dst_dir + '\\' + 'File_Copying_Records.txt', 'w') as File_Copying_Records:
+            File_Copying_Records.write('Orig_File\tOrig_SHA256Hash\tCopied_File\tCopied_SHA256Hash')
+        File_Copying_Records.close()
+
+    File_Copying_Records_DF = pd.read_csv(root_dst_dir + '\\' + 'File_Copying_Records.txt', sep = '\t', lineterminator = '\n', header = 0)    
 
     
-if File_Copying_Records_exists == False: #Create File_Copying_Records.txt
-    with open(dst + '\\' + 'File_Copying_Records.txt', 'w', newline='') as File_Copying_Records:
-        File_Copying_Records.write('Version\tFile_Path\tSHA256Hash#')
-    File_Copying_Records.close()
+#Subdirectory Structure
 
+    #Gathering Destination file paths for every item and also copying subdirectories
+    for src_dir_path, dirs, files in os.walk(root_src_dir):
+        dst_dir_path = src_dir_path.replace(root_src_dir, root_dst_dir, 1)
+        if not os.path.exists(dst_dir_path):
+            os.makedirs(dst_dir_path)
 
-
-
-
-#WatchDog
-class OnMyWatch:
+            
+#Process Every File
     
-    # Set the directory on watch
-    watchDirectory = src
+        for file_name in files:
 
-    def __init__(self):
-        self.observer = Observer()
+            print('Processing ' + file_name.split('\\')[-1])
 
-    def run(self):
-        event_handler = Handler()
-        self.observer.schedule(event_handler, self.watchDirectory, recursive = True)
-        self.observer.start()
-        try:
-            while True:
-                time.sleep(5)
-        except:
-            self.observer.stop()
-            print("Observer Stopped")
 
-        self.observer.join()
+            #Initialize useful variables
+            src_file_path = os.path.join(src_dir_path, file_name)
+            dst_file_path = os.path.join(dst_dir_path, file_name)
 
-print('Monitoring ' + src)
 
-class Handler(FileSystemEventHandler):
+            #Skip locked files
+            if os.access(src_file_path, os.W_OK) == False:
+                print('File ' + file_name + ' is locked atm')
+                continue
 
-    @staticmethod
-    def on_any_event(event):
-        if event.is_directory:
-            return None
 
-        elif event.event_type == 'created' and event.src_path.split('.')[-1] == 'txt':
-
-            File_Copying_Records_DF = pd.read_csv(dst + '\\' + 'File_Copying_Records.txt', sep = '\t', lineterminator = '\n', header = 0)    
+            #Get Orig Hash
+            orig_hash_process = sha256()
             
-            print(' ')
+            try:
+                with open(src_file_path, 'rb') as original_file:
+                    for byte_block in iter(lambda: original_file.read(128000),b""):
+                        orig_hash_process.update(byte_block)
+                original_file.close()
+
+            except PermissionError:
+                print('Permission Error, Skipped')
+                continue
             
-            # Event is created, you can process it now
-            print("File was Created (and copied): % s." % event.src_path)
+            orig_hash = orig_hash_process.hexdigest()
 
-            shutil.copy(event.src_path, dst)
-
-
-#Record event
-
-    #Original Hash
-            with open(event.src_path, 'r') as original_file:
-                original_text = original_file.read()
-            original_file.close()
-
-            orig_encoded_text = original_text.encode()
-            orig_hash = sha256(orig_encoded_text).hexdigest()
-
-            File_Copying_Records_DF = File_Copying_Records_DF.append({'Version': 'Original', 'File_Path': event.src_path, 'SHA256Hash#': orig_hash}, ignore_index=True)
-
-
-            with open(dst + '\\' + 'File_Copying_Records.txt', 'a', newline='') as File_Copying_Records:
-                File_Copying_Records.write('\nOriginal\t' + event.src_path + '\t' + orig_hash)
-            File_Copying_Records.close()
-                                           
-    #Copy File Hash
-            with open(dst + '\\' + event.src_path.split('\\')[-1], 'r') as copy_file:
-                copy_file_text = copy_file.read()
-            copy_file.close()
-
-            copy_file_encoded_text = copy_file_text.encode()
-            copy_file_hash = sha256(copy_file_encoded_text).hexdigest()
 
             
-            File_Copying_Records_DF = File_Copying_Records_DF.append({'Version': 'Copy', 'File_Path': dst + event.src_path.split('\\')[-1], 'SHA256Hash#': copy_file_hash}, ignore_index=True)
+            #No Action Needed Statement
+            if src_file_path in set(File_Copying_Records_DF['Orig_File']) and orig_hash in set(File_Copying_Records_DF['Orig_SHA256Hash']):
+                print('No action needed')
+                print('')
 
-            with open(dst + '\\' + 'File_Copying_Records.txt', 'a', newline='') as File_Copying_Records:
-                File_Copying_Records.write('\nCopy\t' + dst + '\\' + event.src_path.split('\\')[-1] + '\t' + copy_file_hash)
-            File_Copying_Records.close()
+            #Handling a New Original File: Copy File, Check Hash match, Append DF
 
+            if src_file_path not in set(File_Copying_Records_DF['Orig_File']):# and (orig_hash not in set(File_Copying_Records_DF['Orig_SHA256Hash'])):
+
+                shutil.copy(src_file_path, dst_file_path)
+                
+
+                #Get Hash
+                copyfile_hash_process = sha256()
+
+                with open(dst_file_path, 'rb') as copy_file:
+                    for byte_block in iter(lambda: copy_file.read(128000),b""):
+                        copyfile_hash_process.update(byte_block)
+                copy_file.close()
+
+                copy_file_hash = copyfile_hash_process.hexdigest()
+                
+                
+                #Match Check
+                if orig_hash != copy_file_hash:
+                    print('Copy Failiure for ' + file_name)
+
+                #Update DF
+                
+                File_Copying_Records_DF = File_Copying_Records_DF.append({'Orig_File': src_file_path, 'Orig_SHA256Hash': orig_hash, 'Copied_File': dst_file_path, 'Copied_SHA256Hash': copy_file_hash}, ignore_index=True)
+                print('NEW FILE copied')
+                print('')
+
+
+            #Handling a Modified Original File: Copy with updated name, Append DF
+            if (src_file_path in set(File_Copying_Records_DF['Orig_File']) and orig_hash not in set(File_Copying_Records_DF['Orig_SHA256Hash'])):
+
+                shutil.copy(src_file_path, dst_file_path)
+                
+                
+                #Get Hash
+                copyfile_hash_process = sha256()
+                with open(dst_file_path, 'rb') as copy_file:
+                    for byte_block in iter(lambda: copy_file.read(128000),b""):
+                        copyfile_hash_process.update(byte_block)
+                copy_file.close()
+
+                copy_file_hash = copyfile_hash_process.hexdigest()
+
+                
+                #Match Check
+                if orig_hash != copy_file_hash:
+                    print('Copy Failiure for ' + file_name)
+
+
+                #Update DF  
+                File_Copying_Records_DF = File_Copying_Records_DF.append({'Orig_File': src_file_path, 'Orig_SHA256Hash': orig_hash, 'Copied_File': dst_file_path, 'Copied_SHA256Hash': copy_file_hash}, ignore_index=True)
+                print('UPDATED FILE copied')
+                print('')
+
+
+    #Re-Copy any mis matched Hashes:
+    for index in range(len(File_Copying_Records_DF['Orig_SHA256Hash'])):
+        if File_Copying_Records_DF['Orig_SHA256Hash'][index] != File_Copying_Records_DF['Copied_SHA256Hash'][index]:
+            print(File_Copying_Records_DF['Orig_File'][index] + ' has bad copy')
             
-    #Print
-            File_Copying_Records_DF.to_csv(dst + '\\' + 'File_Copying_Records_From_DF.txt', sep='\t', index = False, header = True)
-
-            wb = Workbook()
-            ws = wb.active
-
-            for r in dataframe_to_rows(File_Copying_Records_DF, index=False, header=True):
-                ws.append(r)
-
-            ws.column_dimensions['B'].width = 65
-            ws.column_dimensions['C'].width = 65
-
-            wb.save(dst + '\\File_Copying_Records.xlsx')
-
-            print('Original SHA_256_Hash #_: ' + orig_hash)
-            print('Copy File SHA_256_Hash #: ' + copy_file_hash)
-
             
 
+#Wrap Up: Create Copy Record, set schedule
+                      
+    File_Copying_Records_DF.to_csv(root_dst_dir + '\\' + 'File_Copying_Records.txt', sep='\t', line_terminator = '\n', index = False, header = True, quoting=csv.QUOTE_NONE, quotechar='',  escapechar='$')
 
-if __name__ == '__main__':
-    watch = OnMyWatch()
-    watch.run()
+
+#Schedule the Program
+    
+src2 = r'O:\Development\SoftwareDevelopmet\SHA256HashTestData\NGS'
+src3 = r'C:\Users\efu\Desktop\server3'
+src4 = r'C:\Users\efu\Desktop\server4'
+src5 = r'C:\Users\efu\Desktop\server5'
+src6 = r'C:\Users\efu\Desktop\server6'
+
+root_dst_dir = r'C:\Users\efu\Desktop\server2'
+
+joblist = [r'C:\Users\efu\Desktop\server1', r'C:\Users\efu\Desktop\server3', r'C:\Users\efu\Desktop\server4',r'C:\Users\efu\Desktop\server5', r'C:\Users\efu\Desktop\server6']
+
+
+jobnum = 0
+
+while True:
+    
+    if jobnum == 5:
+        jobnum = 0
+
+    root_src_dir = joblist[jobnum]
+
+    Auto_Copy(root_src_dir, root_dst_dir)
+
+    jobnum += 1
+
+    print('')
+
+    #add: x file were copied
+    
+    print('Done Processing Folder')
+    print('')
+
+    time.sleep(5)
+    
