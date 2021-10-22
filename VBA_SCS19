@@ -1,9 +1,9 @@
 Option Explicit
-Global Data_Directory_Path As String
+Global Program_Log_Path As String
 'Public MyPath As String
 Sub Logger(Message As String)
     On Error Resume Next
-    Open Data_Directory_Path For Append As #1
+    Open Program_Log_Path For Append As #1
     Print #1, Now & " " & Message
     Close #1
     Resume Next
@@ -58,7 +58,6 @@ End Function
 Sub WriteVBScriptForAutoForm10()
     Dim s As String, SFilename As String
     Dim intFileNum As Integer, wshShell As Object, proc As Object
-    Dim Program_Log_Path As String
     Dim Excel_File_Name As String
     Dim Project_Output_Path As String
     Dim Excel_Template_Path As String
@@ -67,28 +66,34 @@ Sub WriteVBScriptForAutoForm10()
     Dim LOQ As String
     Dim LOD As String
     Dim R2 As String
-    Logger ("GetPersonLoggedInToPC: " & GetPersonLoggedInToPC)
-    Logger ("GetPCName: " & GetPCName)
+    Dim Data_Directory_Path As String
+    If ThisWorkbook.Sheets("Form1_Sample").Range("B1").Value = "" Then MsgBox ("You must enter the Project ID"): Sheets("Form1_Sample").Select: Sheets("Form1_Sample").Range("B1").Select: Exit Sub
+
     Data_Directory_Path = Range("B3").Value & "\" & Sheets("Form1_Sample").Range("B1").Value
-    Logger ("Data_Directory_Path: " & Data_Directory_Path)
+
     Program_Log_Path = Data_Directory_Path & "\" & Format(Date, "ddMmmYYYY") & "_ProgramLog.txt"
-    Logger ("Program_Log_Path: " & Program_Log_Path)
+    Call Logger("Program_Log_Path: " & Program_Log_Path)
+    Call Logger("Data_Directory_Path: " & Data_Directory_Path)
     Excel_File_Name = Range("B4").Value
-    Logger ("Excel_File_Name: " & Excel_File_Name)
+    Call Logger("Excel_File_Name: " & Excel_File_Name)
     Project_Output_Path = Range("B5").Value
-    Logger ("Project_Output_Path: " & Project_Output_Path)
+    Call Logger("Project_Output_Path: " & Project_Output_Path)
     Excel_Template_Path = Range("B6").Value
-    Logger ("Excel_Template_Path: " & Excel_Template_Path)
+    Call Logger("Excel_Template_Path: " & Excel_Template_Path)
     SlopeMin = Range("B7").Value
-    Logger ("SlopeMin: " & SlopeMin)
+    Call Logger("SlopeMin: " & SlopeMin)
     SlopeMax = Range("B8").Value
-    Logger ("SlopeMax: " & SlopeMax)
+    Call Logger("SlopeMax: " & SlopeMax)
     LOQ = Range("B9").Value
-    Logger ("LOQ: " & LOQ)
+    Call Logger("LOQ: " & LOQ)
     LOD = Range("B10").Value
-    Logger ("LOD: " & LOD)
+    Call Logger("LOD: " & LOD)
     R2 = Range("B11").Value
-    Logger ("R2: " & R2)
+    Call Logger("R2: " & R2)
+    
+    Call Logger("GetPersonLoggedInToPC: " & GetPersonLoggedInToPC)
+    Call Logger("GetPCName: " & GetPCName)
+    
     'write VBScript
     s = s & "Wscript.sleep 5000" & vbCrLf
     s = s & "" & vbCrLf
