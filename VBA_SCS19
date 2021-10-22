@@ -1,0 +1,187 @@
+Option Explicit
+Global Data_Directory_Path As String
+'Public MyPath As String
+Sub Logger(Message As String)
+    On Error Resume Next
+    Open Data_Directory_Path For Append As #1
+    Print #1, Now & " " & Message
+    Close #1
+    Resume Next
+End Sub
+Function GetPersonLoggedInToPC() As String
+    Dim StrComputer As String
+    Dim ObjWMIService, ObjComputer, ColComputer As Object
+    StrComputer = "."
+    Set ObjWMIService = GetObject("winmgmts:" & "{impersonationLevel=impersonate}!\\" & StrComputer & "\root\cimv2")
+    Set ColComputer = ObjWMIService.ExecQuery("Select * from Win32_ComputerSystem")
+    For Each ObjComputer In ColComputer
+        GetPersonLoggedInToPC = ObjComputer.UserName
+    Next
+End Function
+Function GetPCName() As String
+    Dim StrComputer As String
+    Dim ObjWMIService, ObjItem, ColItems As Object
+    StrComputer = "."
+    Set ObjWMIService = GetObject("winmgmts:" & "{impersonationLevel=impersonate}!\\" & StrComputer & "\root\cimv2")
+    Set ColItems = ObjWMIService.ExecQuery("Select * from Win32_ComputerSystem")
+    For Each ObjItem In ColItems
+        GetPCName = "Computer Name: " & ObjItem.Name
+    Next
+End Function
+Sub GetRootPath()
+    Range("B3") = SelectFolder("\\Birch\Operations\Data\qpcr\")
+End Sub
+Sub GetProjectOutputPath()
+    Range("B5") = SelectFolder("\\Birch\Operations\5 GlobalShare\")
+End Sub
+Sub GetExcelTemplatePath()
+    Range("B6") = SelectFile("\\Birch\Operations\")
+End Sub
+Function SelectFolder(Optional StartFolder As String) As String
+    ' Open the select folder prompt
+    With Application.FileDialog(msoFileDialogFolderPicker)
+        If StartFolder <> "" Then .InitialFileName = StartFolder
+        If .Show = -1 Then ' if OK is pressed
+            SelectFolder = .SelectedItems(1)
+        End If
+    End With
+End Function
+Function SelectFile(Optional StartFolder As String) As String
+    ' Open the select folder prompt
+    With Application.FileDialog(msoFileDialogFilePicker)
+        If StartFolder <> "" Then .InitialFileName = StartFolder
+        If .Show = -1 Then ' if OK is pressed
+            SelectFile = .SelectedItems(1)
+        End If
+    End With
+End Function
+Sub WriteVBScriptForAutoForm10()
+    Dim s As String, SFilename As String
+    Dim intFileNum As Integer, wshShell As Object, proc As Object
+    Dim Program_Log_Path As String
+    Dim Excel_File_Name As String
+    Dim Project_Output_Path As String
+    Dim Excel_Template_Path As String
+    Dim SlopeMin As String
+    Dim SlopeMax As String
+    Dim LOQ As String
+    Dim LOD As String
+    Dim R2 As String
+    Logger ("GetPersonLoggedInToPC: " & GetPersonLoggedInToPC)
+    Logger ("GetPCName: " & GetPCName)
+    Data_Directory_Path = Range("B3").Value & "\" & Sheets("Form1_Sample").Range("B1").Value
+    Logger ("Data_Directory_Path: " & Data_Directory_Path)
+    Program_Log_Path = Data_Directory_Path & "\" & Format(Date, "ddMmmYYYY") & "_ProgramLog.txt"
+    Logger ("Program_Log_Path: " & Program_Log_Path)
+    Excel_File_Name = Range("B4").Value
+    Logger ("Excel_File_Name: " & Excel_File_Name)
+    Project_Output_Path = Range("B5").Value
+    Logger ("Project_Output_Path: " & Project_Output_Path)
+    Excel_Template_Path = Range("B6").Value
+    Logger ("Excel_Template_Path: " & Excel_Template_Path)
+    SlopeMin = Range("B7").Value
+    Logger ("SlopeMin: " & SlopeMin)
+    SlopeMax = Range("B8").Value
+    Logger ("SlopeMax: " & SlopeMax)
+    LOQ = Range("B9").Value
+    Logger ("LOQ: " & LOQ)
+    LOD = Range("B10").Value
+    Logger ("LOD: " & LOD)
+    R2 = Range("B11").Value
+    Logger ("R2: " & R2)
+    'write VBScript
+    s = s & "Wscript.sleep 5000" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & "Set objShell = CreateObject(""WScript.Shell"")" & vbCrLf
+    s = s & "objShell.Run ""python C:\Users\efu\Desktop\Python\SCS19_AutoForm10_master_VBS.py """"" & Program_Log_Path & """"" """"" & Data_Directory_Path & """"" """"" & _
+                Excel_File_Name & """"" """"" & Project_Output_Path & """"" """"" & Excel_Template_Path & """"" """"" & SlopeMin & """"" """"" _
+                & SlopeMax & """"" """"" & LOQ & """"" """"" & LOD & """"" """"" & R2 & """""""" & vbCrLf
+    s = s & "Set objShell = Nothing" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & Data_Directory_Path & "" & vbCrLf
+    s = s & " 'is the Data Directory Path" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & Excel_File_Name & "" & vbCrLf
+    s = s & " 'is the Excel File Name" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & Project_Output_Path & "" & vbCrLf
+    s = s & " 'is the Project Output Path" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & Excel_Template_Path & "" & vbCrLf
+    s = s & " 'is the Excel Template Path" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & SlopeMin & "" & vbCrLf
+    s = s & " '" & SlopeMax & "" & vbCrLf
+    s = s & " 'is the Min and Max Slope" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & LOD & "" & vbCrLf
+    s = s & " 'is the LOD" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & LOQ & "" & vbCrLf
+    s = s & " 'is the LOQ" & vbCrLf
+    s = s & "" & vbCrLf
+    s = s & " '" & R2 & "" & vbCrLf
+    s = s & " 'is the R2" & vbCrLf
+    s = s & "" & vbCrLf
+    Debug.Print s
+    ' Write VBScript file to disk
+    SFilename = "C:\Users\efu\Desktop\Python\VBS_for_execute_AutoForm10.vbs"
+    intFileNum = FreeFile
+    Open SFilename For Output As intFileNum
+    Print #intFileNum, s
+    Close intFileNum
+    DoEvents
+    ' Run VBScript file
+    Set wshShell = CreateObject("Wscript.Shell")
+    Set proc = wshShell.exec("cscript " & SFilename & " 2> C:\Users\efu\Desktop\Python\AutoForm10_errorlog.txt") ' run VBScript
+    'could also send some variable
+    'Set proc = wsh.Exec("cscript VBScript.vbs var1 var2") 'run VBScript passing variables
+    ThisWorkbook.Saved = True
+    Application.Quit
+End Sub
+'Public Function ReturnVBScript(strText As String)
+'    path = strText
+'End Function
+'Public Function GetParameters() As String
+'    Dim Data_Directory_Path As Object
+'    Dim Excel_File_Name As Object
+'    Dim SlopeMin As Parameters
+'    Dim SlopeMax As Parameters
+'    Dim LOD As Parameters
+'    Dim R2 As Parameters
+'    Set Data_Directory_Path = Range("B2")
+'    Set Excel_File_Name = Range("B3")
+'    Set SlopeMin = Range("B4")
+'    Set SlopeMax = Range("B5")
+'    Set LOD = Range("B6")
+'    Set R2 = Range("B7")
+'End Function
+Public Function ShellRun(sCmd As String) As String
+    'Run a shell command, returning the output as a string
+    Dim oShell As Object
+    Set oShell = CreateObject("WScript.Shell")
+    'run command
+    Dim oExec As Object
+    Dim oOutput As Object
+    Set oExec = oShell.exec(sCmd)
+    Set oOutput = oExec.StdOut
+    'handle the results as they are written to and read from the StdOut object
+    Dim s As String
+    Dim sLine As String
+    While Not oOutput.AtEndOfStream
+        sLine = oOutput.ReadLine
+        If sLine <> "" Then s = s & sLine & vbCrLf
+    Wend
+    ShellRun = s
+End Function
+'
+'Public Sub VBAtoShell()
+'    Dim strExec As String
+'
+'    strExec = "C:\Users\efu\AppData\Local\Programs\Python\Python39\python.exe C:\Users\efu\Desktop\Python\SCS19AutoForm10_Excelver.py"
+'    strExec = ShellRun(strExec)
+'
+'End Sub
+
