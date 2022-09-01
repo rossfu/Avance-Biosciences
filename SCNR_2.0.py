@@ -9,10 +9,11 @@ import traceback
 import threading
 import pytesseract
 import numpy as np
-##import xlwings as xw
 import tkinter as tk
-##from functools import partial
 from datetime import datetime, timedelta
+
+import datefinder
+from dateutil.relativedelta import relativedelta
 
 import mysql.connector
 
@@ -81,9 +82,11 @@ class scnr:
             self.scnr_log_IPaddress = config[1].split(',')[2]
 
             self.config_tbl = config[3].split(',')[1]
-            
-        print('You are logging in to the ' + self.scnr_log_db + ' database at IP Address: ' + self.scnr_log_IPaddress + '\n')
 
+        if self.login_msg==False:
+            print('You are logging in to the ' + self.scnr_log_db + ' database at IP Address: ' + self.scnr_log_IPaddress + '\n')
+
+        self.login_msg=True
 
         # Log in window
         self.login_window = tk.Tk()
@@ -105,7 +108,6 @@ class scnr:
         pw_label = tk.Label(self.login_window, text = 'Password', font=('Arial', 10), bg='white')
         pw_label.grid(column=0,row=1)
 
-            
         self.login_button = tk.Button(self.login_window, text='Log In', command=lambda: self.try_login(self.db_user.get(), self.db_pw.get(), self.scnr_log_db, self.scnr_log_table, self.scnr_log_IPaddress, self.config_tbl), font=('Arial', 9), bg='white')
         self.login_button.grid(column=1,row=2, columnspan = 3)
         self.login_button.focus_set()
@@ -128,8 +130,6 @@ class scnr:
             self.lims_db.commit()
             self.login_success1 = True
 
-            print('\nDatabase credentials approved')
-##            run_log('\nDatabase credentials approved')
             
             goodlogin = tk.messagebox.showinfo('Notice', 'Database credentials approved')
             self.login_window.destroy()
@@ -158,9 +158,7 @@ class scnr:
             self.mysql_ver_final_img_save_path = self.final_scan_img_save_dir_path.replace('\\', r'\\')
 
             self.login_success = True
-            
-            print('\nConfig Settings Acquired\n')
-            
+          
 
             # Params button
             self.param_window_count=0
@@ -189,6 +187,10 @@ class scnr:
         self.init_video = 0
         self.rescan1 = False
         self.rescan2 = False
+        self.id_exists = False
+        self.crop_num = 0
+        self.ocr1_done = False
+        self.decode2_done = False
         
         # Output Directory Vars
         self.local_scnr_path = r'C:\users' + '\\' + os.environ['USERNAME'] + '\\' + 'Documents' + '\\' + 'Local_SCNR_data' # My Documents
@@ -261,9 +263,9 @@ class scnr:
         self.scan_result2.grid(column=2,row=3, sticky='EW')
 
         # Create Start button:       
-        self.scan1_button_text = tk.StringVar()
-        self.scan1_button_text.set('Scan')
-        self.scan1_button = tk.Button(textvariable=self.scan1_button_text, command=self.main_scan_button, font=('Arial', 10), bg='white')
+##        self.scan1_button_text = tk.StringVar()
+##        self.scan1_button_text.set('Scan')
+        self.scan1_button = tk.Button(text='Scan', command=self.main_scan_button, font=('Arial', 10), bg='white')
         self.scan1_button.grid(column=0,row=5)
 
         # Instructions Label
@@ -294,10 +296,14 @@ class scnr:
         
         # Database Log In
         self.login_success = False
+        self.login_msg=False
         self.LIMSlogin()
                 
         # Start video thread:
         self.window.after(0, self.init_videoloop())
+
+        # param count
+        self.param_try = 0
         
                 
         # Main event loop:
@@ -365,7 +371,8 @@ class scnr:
 
 
     def set_parameters(self):
-
+        self.param_try+=1
+        
         self.param_window_count += 1
 
         if self.param_window_count > 1:
@@ -380,7 +387,7 @@ class scnr:
         self.enter_params_window.geometry("400x600")
         self.enter_params_window.lift()
 
-        # Param Headers
+        # Create Param Headers
         self.pciemployee_header = tk.Label(self.enter_params_window, text = 'PCI Employee:', font=('Arial', 10), bg='white')
         self.ordernumber_header = tk.Label(self.enter_params_window, text = 'Order Number:', font=('Arial', 10), bg='white')
         self.boxnumber_header = tk.Label(self.enter_params_window, text = 'Box Number:', font=('Arial', 10), bg='white')
@@ -392,76 +399,51 @@ class scnr:
         self.sampleretention_header = tk.Label(self.enter_params_window, text = 'Sample Retention:', font=('Arial', 10), bg='white')
         self.tissuetype_header = tk.Label(self.enter_params_window, text = 'Tissue Type:', font=('Arial', 10), bg='white')
 
-        # Param Entries
+        # Create Entry Fields
         self.pci_employee = tk.Label(self.enter_params_window, text = os.environ['USERNAME'], font=('Arial', 10), bg='white')
-##        if self.pci_employee != '' and self.clabels_to_print_entry != '' and self.boxnumber_entry != '' and self.sampletype_entry != '' and self.tissuetype_option_var.get() != '' and self.containertype_entry != '' and self.storage_cond_option_var.get() != '' and self.arrive_cond_option_var.get() != '' and self.sample_retention_option_var.get() != '':
+        self.ordernumber_entry = tk.Entry(self.enter_params_window, width = 20)
+        self.boxnumber_entry = tk.Entry(self.enter_params_window, width = 20)
+        self.clabels_to_print_entry = tk.Entry(self.enter_params_window, width = 20)
+        self.sampletype_entry = tk.Entry(self.enter_params_window, width = 20)
+        self.containertype_entry = tk.Entry(self.enter_params_window, width = 20)
 
+        # Create Drop down menus
+        self.tissuetype_options = ['Cells', 'Control', 'DNA', 'Feces', 'Other', 'Protein', 'Reagent', 'RNA', 'Saliva', 'Standard', 'Tissue/Blood', 'Urine', 'Virus']
+        self.tissuetype_option_var = tk.StringVar()
+        self.tissuetype_drop_down = tk.OptionMenu(self.enter_params_window, self.tissuetype_option_var, *self.tissuetype_options)
 
-        try:
-            # Temp vars
-            self.cLprint_store = self.clabels_to_print_entry.get()
-            self.ordernum_store = self.ordernumber_entry.get()
-            self.boxnum_store = self.boxnumber_entry.get()
-            self.stype_store = self.sampletype_entry.get()
-            self.ctype_store = self.containertype_entry.get()
-            self.ttype_store = self.tissuetype_option_var.get()
-            self.scond_store = self.storage_cond_option_var.get()
-            self.acond_store = self.arrive_cond_option_var.get()
-            self.sret_store = self.sample_retention_option_var.get()
+        self.storage_cond_options = ['-80 degrees Celsius', '-20 degrees Celsius', '4 degrees Celsius', 'RT']
+        self.storage_cond_option_var = tk.StringVar()
+        self.storage_cond_drop_down = tk.OptionMenu(self.enter_params_window, self.storage_cond_option_var, *self.storage_cond_options)
+
+        self.arrive_cond_options = ['RT', 'Dry Ice', 'Credo/Cube Cooler', 'Liquid Nitrogen', 'Cold Pack/Ice']
+        self.arrive_cond_option_var = tk.StringVar()
+        self.arrive_cond_drop_down = tk.OptionMenu(self.enter_params_window, self.arrive_cond_option_var, *self.arrive_cond_options)
+
+        self.sample_retention_options = ['90 Days']
+        self.sample_retention_option_var = tk.StringVar()
+        self.sample_retention_drop_down = tk.OptionMenu(self.enter_params_window, self.sample_retention_option_var, *self.sample_retention_options)
+
+        
+        # Get previously established Params from the database
+        try: 
+            self.previous_params_query = self.lims_db_cursor.execute("SELECT * FROM avancelims.scnr_log WHERE Time_Stamp = '" + str(self.runtime) + "'")
+            self.previous_params = self.lims_db_cursor.fetchone()
+            
+            if self.previous_params[20] != None and self.previous_params[20] != None and self.previous_params[21] != None and self.previous_params[22] != None and self.previous_params[23] != None and self.previous_params[24] != None and self.previous_params[25] != None and self.previous_params[26] != None and self.previous_params[27] != None and self.previous_params[28] != None:
+
+                self.ordernumber_entry.insert(0,str(self.previous_params[20]))
+                self.boxnumber_entry.insert(0,str(self.previous_params[21]))
+                self.clabels_to_print_entry.insert(0,str(self.previous_params[22]))
+                self.sampletype_entry.insert(0,str(self.previous_params[23]))
+                self.containertype_entry.insert(0,str(self.previous_params[25]))
+                self.tissuetype_option_var.set(str(self.previous_params[24]))
+                self.storage_cond_option_var.set(str(self.previous_params[26]))
+                self.arrive_cond_option_var.set(str(self.previous_params[27]))
+                self.sample_retention_option_var.set(str(self.previous_params[28]))
+            
         except:
-            donothing=1
-
-        try:
-            # Copy existing values into entry fields
-            self.ordernumber_entry = tk.Entry(self.enter_params_window, width = 20, textvariable = self.ordernum_store)
-            self.boxnumber_entry = tk.Entry(self.enter_params_window, width = 20, textvariable = self.boxnum_store)
-            self.clabels_to_print_entry = tk.Entry(self.enter_params_window, width = 20, textvariable = self.cLprint_store)
-            self.sampletype_entry = tk.Entry(self.enter_params_window, width = 20, textvariable = self.stype_store)
-            self.containertype_entry = tk.Entry(self.enter_params_window, width = 20, textvariable = self.ctype_store)
-
-            self.tissuetype_options = ['Cells', 'Control', 'DNA', 'Feces', 'Other', 'Protein', 'Reagent', 'RNA', 'Saliva', 'Standard', 'Tissue/Blood', 'Urine', 'Virus']
-            self.tissuetype_option_var = tk.StringVar()
-            self.tissuetype_drop_down = tk.OptionMenu(self.enter_params_window, self.tissuetype_option_var, *self.tissuetype_options)
-            self.tissuetype_option_var.set(self.ttype_store)
-
-            self.storage_cond_options = ['-80 degrees Celsius', '-20 degrees Celsius', '4 degrees Celsius', 'RT']
-            self.storage_cond_option_var = tk.StringVar()
-            self.storage_cond_drop_down = tk.OptionMenu(self.enter_params_window, self.storage_cond_option_var, *self.storage_cond_options)
-            self.storage_cond_option_var.set(self.scond_store)
-            
-            self.arrive_cond_options = ['RT', 'Dry Ice', 'Credo/Cube Cooler', 'Liquid Nitrogen', 'Cold Pack/Ice']
-            self.arrive_cond_option_var = tk.StringVar()
-            self.arrive_cond_drop_down = tk.OptionMenu(self.enter_params_window, self.arrive_cond_option_var, *self.arrive_cond_options)
-            self.arrive_cond_option_var.set(self.acond_store)
-            
-            self.sample_retention_options = ['90 Days']
-            self.sample_retention_option_var = tk.StringVar()
-            self.sample_retention_drop_down = tk.OptionMenu(self.enter_params_window, self.sample_retention_option_var, *self.sample_retention_options)
-            self.sample_retention_option_var.set(self.sret_store)
-
-            
-        except: #fresh run, no established values
-            self.ordernumber_entry = tk.Entry(self.enter_params_window, width = 20)
-            self.boxnumber_entry = tk.Entry(self.enter_params_window, width = 20)
-            self.clabels_to_print_entry = tk.Entry(self.enter_params_window, width = 20)
-            self.sampletype_entry = tk.Entry(self.enter_params_window, width = 20)
-            self.containertype_entry = tk.Entry(self.enter_params_window, width = 20)
-
-            self.tissuetype_options = ['Cells', 'Control', 'DNA', 'Feces', 'Other', 'Protein', 'Reagent', 'RNA', 'Saliva', 'Standard', 'Tissue/Blood', 'Urine', 'Virus']
-            self.tissuetype_option_var = tk.StringVar()
-            self.tissuetype_drop_down = tk.OptionMenu(self.enter_params_window, self.tissuetype_option_var, *self.tissuetype_options)
-
-            self.storage_cond_options = ['-80 degrees Celsius', '-20 degrees Celsius', '4 degrees Celsius', 'RT']
-            self.storage_cond_option_var = tk.StringVar()
-            self.storage_cond_drop_down = tk.OptionMenu(self.enter_params_window, self.storage_cond_option_var, *self.storage_cond_options)
-
-            self.arrive_cond_options = ['RT', 'Dry Ice', 'Credo/Cube Cooler', 'Liquid Nitrogen', 'Cold Pack/Ice']
-            self.arrive_cond_option_var = tk.StringVar()
-            self.arrive_cond_drop_down = tk.OptionMenu(self.enter_params_window, self.arrive_cond_option_var, *self.arrive_cond_options)
-
-            self.sample_retention_options = ['90 Days']
-            self.sample_retention_option_var = tk.StringVar()
-            self.sample_retention_drop_down = tk.OptionMenu(self.enter_params_window, self.sample_retention_option_var, *self.sample_retention_options)
+            guess_params_arent_set_yet = 1
 
 
         self.pciemployee_header.pack()
@@ -491,7 +473,6 @@ class scnr:
         fill_params.pack()
 
         
-
     def fill_params(self): #Lazy dev tool
         self.ordernumber_entry.insert(0,'6')
         self.boxnumber_entry.insert(0,'5000')
@@ -510,7 +491,7 @@ class scnr:
             self.previous_params = self.lims_db_cursor.fetchone()
 
             text =  'PCI Employee: ' + os.environ['USERNAME'] + '\n' +\
-                    'Order Number: ' + str(self.unfinished_scnr_run_records[self.record_idx][20]) + '\n' +\
+                    'Order Number: ' + str(self.unfinished_scnr_run_records[self.record_idx][20].strip()) + '\n' +\
                     'Box Number: ' + str(self.unfinished_scnr_run_records[self.record_idx][21]) + '\n' +\
                     'C# Labels to Print: ' + str(self.unfinished_scnr_run_records[self.record_idx][22]) + '\n' +\
                     'Sample Type: ' + str(self.unfinished_scnr_run_records[self.record_idx][23]) + '\n' +\
@@ -527,10 +508,10 @@ class scnr:
             self.stype_store = tk.StringVar(value=str(self.unfinished_scnr_run_records[self.record_idx][23]))
             self.ctype_store = tk.StringVar(value=str(self.unfinished_scnr_run_records[self.record_idx][25]))
 
-            self.ttype_store = str(self.unfinished_scnr_run_records[self.record_idx][23])
-            self.scond_store = str(self.unfinished_scnr_run_records[self.record_idx][25])
-            self.acond_store = str(self.unfinished_scnr_run_records[self.record_idx][26])
-            self.sret_store = str(self.unfinished_scnr_run_records[self.record_idx][27])
+            self.ttype_store = str(self.unfinished_scnr_run_records[self.record_idx][24])
+            self.scond_store = str(self.unfinished_scnr_run_records[self.record_idx][26])
+            self.acond_store = str(self.unfinished_scnr_run_records[self.record_idx][27])
+            self.sret_store = str(self.unfinished_scnr_run_records[self.record_idx][28])
 
 
             param_header = tk.Label(self.window, text = 'Parameters:', font=('Arial', 14), bg='white')
@@ -578,7 +559,7 @@ class scnr:
             self.main_window_param_list.grid(column=1, row=13)
             self.change_param_button = tk.Button(self.window, text='Change Parameters', command=self.set_parameters, font=('Arial', 10), bg='white')
             
-            self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Order_Number = '" + str(self.ordernumber_entry.get()) + '\n' +\
+            self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Order_Number = '" + str(self.ordernumber_entry.get()) + \
                                         "', Box_Number = '" + str(self.boxnumber_entry.get()) + \
                                         "', CLabels_to_Print = '" + str(self.clabels_to_print_entry.get()) + \
                                         "', Sample_Type = '" + str(self.sampletype_entry.get()) + \
@@ -588,6 +569,16 @@ class scnr:
                                         "', Arrival_Condition = '" + str(self.arrive_cond_option_var.get()) + \
                                         "', Sample_Retention = '" + str(self.sample_retention_option_var.get()) + \
                                         "', Last_update_time = '" + str(datetime.now()) + "' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
+
+            self.cLprint_store = self.clabels_to_print_entry.get()
+            self.ordernum_store = self.ordernumber_entry.get()
+            self.boxnum_store = self.boxnumber_entry.get()
+            self.stype_store = self.sampletype_entry.get()
+            self.ctype_store = self.containertype_entry.get()
+            self.ttype_store = self.tissuetype_option_var.get()
+            self.scond_store = self.storage_cond_option_var.get()
+            self.acond_store = self.arrive_cond_option_var.get()
+            self.sret_store = self.sample_retention_option_var.get()
 
             self.enter_params_window.destroy()
 
@@ -602,6 +593,9 @@ class scnr:
             z.write('User: ' + os.environ['USERNAME'] + '\n')
             z.write('Computer Name: ' + os.environ['COMPUTERNAME'] + '\n\n')
             z.write(str(str(self.runtime)) + '\n\n') # Log and DB have same run time
+
+            z.write('Config Settings Acquired')
+            z.write('\nDatabase credentials approved')
 
         # Reset Code
         self.need_reset = False
@@ -625,6 +619,7 @@ class scnr:
                 
         
     def run_log(self, message):
+        print(message)
         with open(self.config_and_log_path_on_45drives + '\\' + 'SCNR_Log.txt', 'a') as z:
             z.write(message)
         with open(self.config_and_log_path_on_45drives + '\\' + 'SCNR_Log.txt', 'r') as r: # Read Log, write to database
@@ -846,7 +841,7 @@ class scnr:
 
 
                     # FIRST SCAN
-                    if self.next_action == 'FIRST SCAN':
+                    if self.next_action == 'FIRST SCAN' or self.next_action == 'JUDGE SCAN 1':
 
                         if os.path.exists(self.temp_scan_img_save_dir_path) == False:
                             os.mkdir(self.temp_scan_img_save_dir_path)
@@ -861,7 +856,7 @@ class scnr:
                         self.lims_db.commit()
 
                         # OCR
-                        self.OCR(self.scan1_temp_img_path, 1)
+##                        self.OCR(self.scan1_temp_img_path, 1)
 
                         # Update Instructions
                         self.instructions.configure(text='Review the Client Label image and if it is clearly legible then click \nthe green Accept button. If not, click the scan button until a \ngood image of the label is obtained.')
@@ -870,8 +865,8 @@ class scnr:
                         self.Approve_Scan1_button = tk.Button(self.window, text='Accept', command=self.scan_approved, font=('Arial', 10), bg='green')
                         self.Approve_Scan1_button.grid(column=0,row=6)
 
-                        # Update preview with final image:
                         
+                        # Update preview with final image:
                         img = (Image.open(self.scan1_temp_img_path))
                         self.scan_img_width, self.scan_img_height = img.size
                         resized_image= img.resize((int(self.scan_img_width*self.preview_scale),int(self.scan_img_height*self.preview_scale)))
@@ -880,8 +875,7 @@ class scnr:
                         self.scan_result.configure(image=self.final_image)
                         self.scan_result.image = self.final_image
 
-                        self.scan1_button_text.set("Re-Scan Client Label")
-                        self.scan1_button.configure(state='normal', bg='red')
+                        self.scan1_button.configure(text='Re-Scan Client Label',state='normal', bg='red')
                         
                     # SECOND Scan
                     else:
@@ -896,7 +890,6 @@ class scnr:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             errmsg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             errmsg = errmsg.replace("'", '')
-            print(errmsg)
             self.run_log('\n\n######################################################\n' + errmsg)
 
 
@@ -920,13 +913,17 @@ class scnr:
 
     def main_scan_button(self):
 
-        if self.next_action == 'FIRST SCAN':            
+        print('action: ' + self.next_action)
+        print('crop num: ' + str(self.crop_num))
 
+        
+        if self.next_action == 'FIRST SCAN':            
+                        
             if self.login_success == False:
                 tk.messagebox.showerror('Error', 'Log In to LIMS')
                 self.LIMSlogin()
-
-            elif self.pci_employee == '' or self.clabels_to_print_entry == '' or self.boxnumber_entry == '' or self.sampletype_entry == '' or self.tissuetype_option_var.get() == '' or self.containertype_entry == '' or self.storage_cond_option_var.get() == '' or self.arrive_cond_option_var.get() == '' or self.sample_retention_option_var.get() == '':
+            
+            elif self.pci_employee == '' or self.cLprint_store == '' or self.ordernum_store == '' or self.boxnum_store == '' or self.stype_store == '' or self.ctype_store == '' or self.ttype_store == '' or self.scond_store == '' or self.acond_store == '' or self.sret_store == '':
                 tk.messagebox.showerror('Error', 'Set the parameters')
                 self.set_parameters()
                 
@@ -937,7 +934,8 @@ class scnr:
             else:
                 self.main_window_set_param_button.destroy()
                 
-                print('option var: ' + self.vial_type_option_var.get() + '\n')
+##                print('option var: ' + self.vial_type_option_var.get() + '\n')
+                
                 if self.rescan1 == False: # Do not state vial type or action during rescan 1
                     self.run_log(self.vial_type_option_var.get() + '\n\n' + str(time.asctime()) + '. ' + self.next_action)
 
@@ -950,19 +948,16 @@ class scnr:
                 except:
                     do_nothing=1
 
-                
                 self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Vial_Type = '" + self.vial_type_option_var.get() + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
                 self.lims_db.commit()
 
-                self.scan1_button_text.set("Scanning..")
-                self.scan1_button.configure(state='disabled')
+                self.scan1_button.configure(text = 'Scanning..',state='disabled')
                 self.start_scan()
            
         elif self.next_action == 'JUDGE SCAN 1':
             self.scan_result.configure(image='')
             self.scan_result.image = None
-            self.scan1_button_text.set('Scan')
-            self.scan1_button.configure(bg='white')
+            self.scan1_button.configure(text='Scan',bg='white')
             self.Approve_Scan1_button.destroy()
             self.next_action = 'FIRST SCAN' # reset scan 1
 
@@ -975,14 +970,16 @@ class scnr:
             
             self.run_log('\n\n' + time.asctime() + '. Rescan 1')
 
+            if self.crop_num == 1: #Reset
+                self.scan1_button.configure(text='Scan', bg='white')
+                self.crop_num = 0
+                self.recrop_button.destroy()
 
         elif self.next_action == 'SCAN 2':
             if self.rescan2 == False: # Do not log next action during rescan 2
                 self.run_log('\n\n' + time.asctime() + '. ' + self.next_action)
 
-            self.scan2_button_text.set("Scanning..")
-            self.scan2_button.configure(state='disabled')
-
+            self.scan2_button.configure(text='Scanning..',state='disabled')
             self.settingsbutton.configure(state='disabled') # disable settings stuff
 
             try:
@@ -991,16 +988,15 @@ class scnr:
                 do_nothing=1
                 
             self.start_scan()
-
+            
 
         elif self.next_action == 'JUDGE SCAN 2':
+                
             self.scan_result2.configure(image='')
             self.scan_result2.image = None
-            self.scan2_button_text.set('Scan')
-            self.scan2_button.configure(bg='white')
+            self.scan2_button.configure(text='Scan',bg='white')
             self.settingsbutton.configure(state='normal')
 
-            
             if self.one_read_correct == True:
                 self.Approve_Scan2_button.destroy()
 
@@ -1010,168 +1006,326 @@ class scnr:
             self.run_log('\n\n' + time.asctime() + '. Rescan 2')
 
 
+    def crop_final_img(self,scannum,recrop_true_false):
+        self.cropping = False
+        self.x_start, self.y_start, self.x_end, self.y_end = 0, 0, 0, 0
+        image = cv.imread(self.scan1_temp_img_path)
+        oriImage = image.copy()
+
+        def mouse_crop(event, x, y, flags, param):
+            # grab references to the global variables
+##            global x_start, y_start, x_end, y_end, cropping
+            # if the left mouse button was DOWN, start RECORDING
+            # (x, y) coordinates and indicate that cropping is being
+            if event == cv.EVENT_LBUTTONDOWN:
+                self.x_start, self.y_start, self.x_end, self.y_end = x, y, x, y
+                self.cropping = True
+            # Mouse is Moving
+            elif event == cv.EVENT_MOUSEMOVE:
+                if self.cropping == True:
+                    self.x_end, self.y_end = x, y
+            # if the left mouse button was released
+            elif event == cv.EVENT_LBUTTONUP:
+                # record the ending (x, y) coordinates
+                self.x_end, self.y_end = x, y
+                refPoint = [(self.x_start, self.y_start), (self.x_end, self.y_end)]
+                if len(refPoint) == 2: #when two points were found
+                    roi = oriImage[refPoint[0][1]:refPoint[1][1], refPoint[0][0]:refPoint[1][0]]
+
+
+                    cv.namedWindow('Cropped Image',cv.WINDOW_NORMAL)
+                    cwindow = cv.imshow('Cropped Image', roi)
+                    
+                    if scannum == 1:
+                        self.cropped_scan1_temp_img_path = self.temp_scan_img_save_dir_path + '\\' + os.environ['USERNAME'] + '_Cropped_Scan1_' + str(self.unfinished_scnr_run_records[self.record_idx][0]).replace(':', ';') + '.jpg'
+                        Image.fromarray(roi).save(self.cropped_scan1_temp_img_path) # Temp 45 drives
+                        self.scan_result.configure(image='')
+                        self.scan_result.image = None
+                        img = (Image.open(self.cropped_scan1_temp_img_path))
+                        self.scan_img_width, self.scan_img_height = img.size
+                        resized_image= img.resize((int(self.scan_img_width*self.preview_scale),int(self.scan_img_height*self.preview_scale)))
+                        self.final_image= ImageTk.PhotoImage(resized_image)
+                        self.scan_result.configure(image=self.final_image)
+                        self.scan_result.image = self.final_image
+                        self.crop_num = 1
+                        
+                        # Rescan button
+                        if recrop_true_false == False:
+                            self.scan1_button = tk.Button(self.window, text='Re-Scan Client Label', command=self.main_scan_button, font=('Arial', 10), bg='Red')
+                            self.scan1_button.grid(column=0,row=5)
+                            
+                            # Recrop button
+                            self.recrop_button = tk.Button(self.window, text='Re-Crop', command=lambda: self.crop_final_img(1,True), font=('Arial', 10), bg='Red')
+                            self.recrop_button.grid(column=0,row=6)
+
+                            # Accept button
+                            self.Approve_Scan1_button = tk.Button(self.window, text='Accept', command=self.scan_approved, font=('Arial', 10), bg='Green')
+                            self.Approve_Scan1_button.grid(column=0,row=7)
+
+##                        # OCR
+##                        self.OCR(self.cropped_scan1_temp_img_path, 1)
+                        
+                    elif scannum == 2:
+                        self.cropped_scan2_temp_img_path = self.temp_scan_img_save_dir_path + '\\' + os.environ['USERNAME'] + '_Cropped_Scan2_' + str(self.unfinished_scnr_run_records[self.record_idx][0]).replace(':', ';') + '.jpg'
+                        Image.fromarray(roi).save(self.cropped_scan2_temp_img_path) # Temp 45 drives
+                        self.scan_result2.configure(image='')
+                        self.scan_result2.image = None
+                        img = (Image.open(self.cropped_scan2_temp_img_path))
+                        self.scan_img_width, self.scan_img_height = img.size
+                        resized_image= img.resize((int(self.scan_img_width*self.preview_scale),int(self.scan_img_height*self.preview_scale)))
+                        self.final_image= ImageTk.PhotoImage(resized_image)
+                        self.scan_result2.configure(image=self.final_image)
+                        self.scan_result2.image = self.final_image
+                        self.crop_num = 2
+                        
+                        # Rescan button
+                        if recrop_true_false == False:
+                            self.scan2_button = tk.Button(self.window, text='Re-Scan C-Num Label', command=self.main_scan_button, font=('Arial', 10), bg='Red')
+                            self.scan2_button.grid(column=2,row=5)
+                            
+                            # Recrop button
+                            self.recrop_button = tk.Button(self.window, text='Re-Crop', command=lambda: self.crop_final_img(2,True), font=('Arial', 10), bg='Red')
+                            self.recrop_button.grid(column=2,row=6)
+
+                            # Accept button
+                            self.Approve_Scan1_button = tk.Button(self.window, text='Accept', command=self.scan_approved, font=('Arial', 10), bg='Green')
+                            self.Approve_Scan1_button.grid(column=2,row=7)
+                            
+                        
+                    self.cropping = 'Done' # cropping is finished
+
+                        
+        c_gui_window = cv.namedWindow('Crop The Image')
+        cv.setMouseCallback('Crop The Image', mouse_crop)
+        
+        while True:
+            i = image.copy()
+            if not self.cropping:
+                cv.imshow('Crop The Image', image)
+            elif self.cropping == True:
+                cv.rectangle(i, (self.x_start, self.y_start), (self.x_end, self.y_end), (255, 0, 0), 2)
+                cv.imshow('Crop The Image', i)
+            elif self.cropping == 'Done':
+                cv.destroyAllWindows()
+                break
+            cv.waitKey(1)
+    
 
             
     def scan_approved(self): # APPROVE RESULT
             
         if self.next_action == 'JUDGE SCAN 1': # accepted scan 1
-            # Update Instructions
-            self.instructions.configure(text='Now put on the C-number label on the vial, scan the c-number into \nthe box below, and place the vial back on the turntable. \nClick the Scan button once the vial is in focus and \ncentered in the Live View screen.')
 
-            # Delete buttons
-            self.scan1_button.destroy()
-            self.Approve_Scan1_button.destroy()
+            if self.crop_num == 0:
+                # Update Instructions
+                self.instructions.configure(text='Now put on the C-number label on the vial, scan the c-number into \nthe box below, and place the vial back on the turntable. \nClick the Scan button once the vial is in focus and \ncentered in the Live View screen.')
+                
+                # Delete buttons
+                self.scan1_button.destroy()
+                self.Approve_Scan1_button.destroy()
 
-            # C Number Scan loop (separate scanner)
-            C_Number_Scan_Header = tk.Label(self.window, text = 'C Number Scan:', font = ('Arial', 15), bg='white')
-            C_Number_Scan_Header.grid(column=1, row=8)
-            external_scan_yesno_prompt_answer = ''
-            while external_scan_yesno_prompt_answer != True:
-                self.cnum_input_from_external_scanner = tk.simpledialog.askstring('C Number Label Scan', 'Please use the external scanner to read the cnum label')
-                if self.cnum_input_from_external_scanner != None:
-                    external_scan_yesno_prompt_answer = tk.messagebox.askyesno('Confirm', 'You scanned in C-number: ' + "'" + self.cnum_input_from_external_scanner + "'" +  ', is this the label you are going to place on the Client Label shown on the left?')
-            self.Cnumber_scan = tk.Label(self.window, bg='white', text=self.cnum_input_from_external_scanner)
-            self.Cnumber_scan.grid(column=1, row=9)
+                # Crop
+                self.crop_final_img(1,False)
 
-            try:
-                self.order_num = self.cnum_input_from_external_scanner.split('-')[0]
-                self.c_num = self.cnum_input_from_external_scanner.split('-')[1]
-            except:
-                self.order_num = self.cnum_input_from_external_scanner.split('_')[0]
-                self.c_num = self.cnum_input_from_external_scanner.split('_')[1]
+
+            elif self.crop_num == 1 and self.ocr1_done == False: # Accept cropped scan 1
+
+                # Delete buttons
+                self.scan1_button.destroy()
+                self.recrop_button.destroy()
+                self.Approve_Scan1_button.destroy()           
+
+                # OCR
+                self.OCR(self.cropped_scan1_temp_img_path, 1)
+
 
                 
-            # Save Final Scan 1 Image
-            if os.path.exists(self.final_scan_img_save_dir_path + '\\' + self.order_num) == False:
-                os.mkdir(self.final_scan_img_save_dir_path + '\\' + self.order_num)
-            self.scan1_final_img_path = self.final_scan_img_save_dir_path + '\\' + self.order_num + '\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_Client_Label_Scan.jpg' # Windows Path
-            self.mysql_client_label_path = self.mysql_ver_final_img_save_path + r'\\' + self.order_num + r'\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_Client_Label_Scan.jpg' # MySQL Path
-            if self.need_reset == False:
-                Image.fromarray(self.img_rgb).save(self.scan1_final_img_path) # Save to final path
-            else:
-                shutil.copy(self.unfinished_scnr_run_records[self.record_idx][9], self.scan1_final_img_path) # Copy file to final path
+            elif self.crop_num == 1 and self.ocr1_done:
 
-
-            # Database update: Cnum Label Scan, Client Label Img Path, Cnum, OrderNum, Last update time
-            self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET State = 'Scan 2', C_Number_Scan = '"+self.cnum_input_from_external_scanner+"', Client_Label_Image_Path = '"+self.mysql_client_label_path+"', Cnum_Label_Order_Number = "+self.order_num+", Cnum_Label_C_Number = '"+self.c_num+"', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '"+str(self.runtime)+"'") # Database
-            self.lims_db.commit()
-
-            # Next action
-            self.next_action = 'SCAN 2'
-            self.rescan1 = False
-            
-            # Create scan 2 button
-            self.scan2_button_text = tk.StringVar()
-            self.scan2_button_text.set('Scan')
-            self.scan2_button = tk.Button(textvariable=self.scan2_button_text, command=self.main_scan_button, font=('Arial', 10))
-            self.scan2_button.grid(column=2,row=5)
+                # NEED TO PUT MACROS IN DB
                 
-            # Log
-            self.run_log('\n\n' + time.asctime() + '. Scan 1 Approved, Img 1 saved. Starting Scan 2.')
-
+                # Put OCR in DB
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_OCR = '" + self.label + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
+                
+                # Macro Summary
+                print('\nMACRO SUMMARY:\n')
+                if self.date=='':
+                    print('Date:\t\tnot found')
+                else:
+                    print('Date:\t\tdetected: ' + str(self.date))
+                if self.animal_id == '':
+                    print('Animal id:\tnot found')
+                else:
+                    print('Animal id:\tdetected: ' + str(self.animal_id))
+                if self.day=='':
+                    print('Day collected:\tnot found')
+                else:
+                    print('Day collected:\tdetected: ' + str(self.day))
+                if self.week=='':
+                    print('Week collected:\tnot found')
+                else:
+                    print('Week collected:\tdetected: ' + str(self.week))
+                if self.animalspecies=='':
+                    print('Animal species: not found')
+                else:
+                    print('Animal species: detected: ' + str(self.animalspecies))
+                if self.sex=='':
+                    print('Sex:\t\tnot found')
+                else:
+                    print('Sex:\t\tdetected: ' + str(self.sex))
+                if self.search_phrase_found==False:
+                    print('Search phrase:\tnot found')
+                else:
+                    print('Search phrase:\tdetected: ' + str(self.extract_sample_info_table[self.esit_idx][0]))
+                if self.group=='':
+                    print('Group:\t\tnot found')
+                else:
+                    print('Group:\t\tdetected: ' + str(self.group))
+                if self.grp=='':
+                    print('Grp:\t\tnot found')
+                else:
+                    print('Grp:\t\tdetected: ' + str(self.grp))
 
             
+
+                # C Number Scan loop (separate scanner)
+                C_Number_Scan_Header = tk.Label(self.window, text = 'C Number Scan:', font = ('Arial', 15), bg='white')
+                C_Number_Scan_Header.grid(column=1, row=8)
+                external_scan_yesno_prompt_answer = ''
+                while external_scan_yesno_prompt_answer != True:
+                    self.cnum_input_from_external_scanner = tk.simpledialog.askstring('C Number Label Scan', 'Please use the external scanner to read the cnum label')
+                    if self.cnum_input_from_external_scanner != None:
+                        external_scan_yesno_prompt_answer = tk.messagebox.askyesno('Confirm', 'You scanned in C-number: ' + "'" + self.cnum_input_from_external_scanner + "'" +  ', is this the label you are going to place on the Client Label shown on the left?')
+                self.Cnumber_scan = tk.Label(self.window, bg='white', text=self.cnum_input_from_external_scanner)
+                self.Cnumber_scan.grid(column=1, row=9)
+
+                try:
+                    self.order_num = self.cnum_input_from_external_scanner.split('-')[0]
+                    self.c_num = self.cnum_input_from_external_scanner.split('-')[1]
+                except:
+                    self.order_num = self.cnum_input_from_external_scanner.split('_')[0]
+                    self.c_num = self.cnum_input_from_external_scanner.split('_')[1]
+
+                    
+                # Save Final Scan 1 Image
+                if os.path.exists(self.final_scan_img_save_dir_path + '\\' + self.order_num) == False:
+                    os.mkdir(self.final_scan_img_save_dir_path + '\\' + self.order_num)
+                self.scan1_final_img_path = self.final_scan_img_save_dir_path + '\\' + self.order_num + '\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_Client_Label_Scan.jpg' # Windows Path
+                self.mysql_client_label_path = self.mysql_ver_final_img_save_path + r'\\' + self.order_num + r'\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_Client_Label_Scan.jpg' # MySQL Path
+                if self.need_reset == False:
+                    Image.fromarray(self.img_rgb).save(self.scan1_final_img_path) # Save to final path
+                else:
+                    shutil.copy(self.unfinished_scnr_run_records[self.record_idx][9], self.scan1_final_img_path) # Copy file to final path
+
+                # Database update: Cnum Label Scan, Client Label Img Path, Cnum, OrderNum, Last update time
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET State = 'Scan 2', C_Number_Scan = '"+self.cnum_input_from_external_scanner+"', Client_Label_Image_Path = '"+self.mysql_client_label_path+"', Cnum_Label_Order_Number = "+self.order_num+", Cnum_Label_C_Number = '"+self.c_num+"', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '"+str(self.runtime)+"'") # Database
+                self.lims_db.commit()
+
+                # Next action
+                self.next_action = 'SCAN 2'
+                self.rescan1 = False
+                
+                # Create scan 2 button
+                self.scan2_button = tk.Button(text='Scan', command=self.main_scan_button, font=('Arial', 10))
+                self.scan2_button.grid(column=2,row=5)
+                    
+                # Log
+                self.run_log('\n\n' + time.asctime() + '. Scan 1 Approved, Img 1 saved. Starting Scan 2.')
+
+
+                #Figure out these LIMS columns? #samplename
+
         elif self.next_action == 'JUDGE SCAN 2': # accepted scan 2
 
-            # Update Instructions
-            self.instructions.configure(text='The images were saved to H:\Operations\PCI\C-Labels\<OrderID>. \nClick one of the buttons to the right to continue scanning \nor close the program.')
+            if self.crop_num == 1: # Accept orig scan 2 img
 
-            # Process complete for tube, reset for next tube scan.
-            self.scan2_button.destroy()
-            self.Approve_Scan2_button.destroy()
+                # Update Instructions
+                self.instructions.configure(text='The images were saved to H:\Operations\PCI\C-Labels\<OrderID>. \nClick one of the buttons to the right to continue scanning \nor close the program.')
+                self.scan2_button.destroy()
+                self.Approve_Scan2_button.destroy()
+                self.settingsbutton.configure(state='normal') # enable settings stuff
 
-            self.settingsbutton.configure(state='normal') # disable settings stuff
+                # Log
+                self.run_log('\n\n' + time.asctime() + '. Scan 2 Approved, Img 2 saved')
 
-            # New Vial/Same Vial
-            self.newvialtype_button = tk.Button(text='New Vial Type', command=lambda:self.next_vial('new_vial'), font=('Arial', 10))
-            self.newvialtype_button.grid(column=2, row=4, sticky='NW')
-
-            self.samevialtype_button = tk.Button(text='Same Vial Type', command=lambda:self.next_vial('same_vial'), font=('Arial', 10))
-            self.samevialtype_button.grid(column=2, row=5, sticky='NW')
-
-            # Save Scan Image 2 and Database update
-            self.scan2_final_img_path = self.final_scan_img_save_dir_path + '\\' + self.order_num + '\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_C_Number_Label_Scan.jpg' # Windows Path
-            self.mysql_cnum_label_path = self.mysql_ver_final_img_save_path + r'\\' + self.order_num + r'\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_C_Number_Label_Scan.jpg' # MySQL Path
-
-            if self.need_reset == False:
-                Image.fromarray(self.img_rgb).save(self.scan2_final_img_path) # Save to final path
-            else:
-                Image.open(self.scan2_temp_img_path).save(self.scan2_final_img_path) # Save to final path
+                # Crop
+                self.crop_final_img(2,False)
                 
-            self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET CNumber_Label_Image_Path = '" + self.mysql_cnum_label_path + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
-            self.lims_db.commit()
-            
-            # Log
-            self.run_log('\n\n' + time.asctime() + '. Scan 2 Approved, Img 2 saved')
+
+            if self.crop_num == 2 and self.decode2_done == False: # Accept First crop
+
+                # Delete buttons
+                self.scan2_button.destroy()
+                self.recrop_button2.destroy()
+                self.Approve_Scan2_button.destroy()
+                
+                # Decode Dmatrix
+                self.decode_dmatrix('crop')
 
 
-            # Transfer to LIMS
-##        db_insert = "INSERT INTO scnr_log (Time_Stamp, User, Computer_ID, Date, Time, State, Last_update_time) VALUES (%s,%s,%s,%s,%s,%s,%s)"
-##        db_insert_vals = (self.runtime, os.environ['USERNAME'], os.environ['COMPUTERNAME'], self.rundate, self.run_time_of_day, 'Start', datetime.now())
-##        self.lims_db_cursor.execute(db_insert, db_insert_vals)
-##        self.lims_db.commit()
-##        
+            if self.crop_num == 2 and self.decode2_done:
 
+                # New Vial/Same Vial
+                self.newvialtype_button = tk.Button(text='New Vial Type', command=lambda:self.next_vial('new_vial'), font=('Arial', 10))
+                self.newvialtype_button.grid(column=2, row=4, sticky='NW')
+                self.samevialtype_button = tk.Button(text='Same Vial Type', command=lambda:self.next_vial('same_vial'), font=('Arial', 10))
+                self.samevialtype_button.grid(column=2, row=5, sticky='NW')
 
+                # Save Scan Image 2 and Database update
+                self.scan2_final_img_path = self.final_scan_img_save_dir_path + '\\' + self.order_num + '\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_C_Number_Label_Scan.jpg' # Windows Path
+                self.mysql_cnum_label_path = self.mysql_ver_final_img_save_path + r'\\' + self.order_num + r'\\' + self.order_num + '_' + self.c_num + '_' + os.environ['USERNAME'] + '_C_Number_Label_Scan.jpg' # MySQL Path
 
-#No current plan to interact
-            
-            #idsamples
-            #idsamplecheckin
-            #idprojects
-            #checkindate
-            #clientprogramid
-            #animalspecies
-            #animalgroup
-            #animalid
-            #sex
-            
-            #datecollected
-            #daycollected
-            #avancedbID
-
-#Figure out these LIMS columns
-            #samplename
-            
-            current_record_query = self.lims_db_cursor.execute("SELECT * FROM avancelims.scnr_log WHERE Time_Stamp = '" + str(self.runtime) + "'")
-            current_record = self.lims_db_cursor.fetchone()
-
-            lims_db_insert = "INSERT INTO samples (idorders, cnumber, tubelabel, Check_In_Timestamp, employee, Log, CLabels_to_print, boxnumber, sampletype, tissuetype, containertype, storagecondition, `condition`, retentiontime) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
-            lims_db_insert_vals = (current_record[20].replace('\n',''), current_record[16].replace('\n',''), current_record[13], self.runtime, os.environ['USERNAME'], current_record[18], current_record[22], current_record[21], current_record[23], current_record[24], current_record[25], current_record[26], current_record[27], current_record[28])
-
-            print(lims_db_insert, lims_db_insert_vals)
-     
-            self.lims_db_cursor.execute(lims_db_insert, lims_db_insert_vals)
-            self.lims_db.commit()
-
-            
-            
-
-            # DB Mark completion
-            if self.need_reset == True:
-                self.scan1_temp_img_path = self.temp_scan_img_save_dir_path + '\\' + os.environ['USERNAME'] + '_Scan1_' + str(self.unfinished_scnr_run_records[self.record_idx][0]).replace(':', ';') + '.jpg'
-                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Reset_attempt = 'True - Completed', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
-##                self.lims_db.commit()
-                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Reset_attempt = 'Completed', Time_stamp_of_associated_reset_record = '" + str(self.runtime) + "' WHERE Time_Stamp = '" + str(self.unfinished_scnr_run_records[self.record_idx][0]) + "'") # Mark the old need reset record as completed
+                if self.need_reset == False:
+                    Image.fromarray(self.img_rgb).save(self.scan2_final_img_path) # Save to final path
+                else:
+                    Image.open(self.scan2_temp_img_path).save(self.scan2_final_img_path) # Save to final path
+                    
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET CNumber_Label_Image_Path = '" + self.mysql_cnum_label_path + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
                 self.lims_db.commit()
 
 
-            # Mark Scan as Done in avancelims.scnr_log
-            self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET State = 'Done', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
-            self.lims_db.commit()
+                # Transfer LIMS.SCNR_LOG to LIMS.SAMPLES
+                current_record_query = self.lims_db_cursor.execute("SELECT * FROM avancelims.scnr_log WHERE Time_Stamp = '" + str(self.runtime) + "'")
+                current_record = self.lims_db_cursor.fetchone()
 
-            # Delete old images
-            os.remove(self.scan1_temp_img_path)
-            os.remove(self.scan2_temp_img_path)
-            print('Temp output files removed')
-            self.run_log('\n\n' + str(time.asctime()) + '. Temp output files removed\n\n')
-            
-            self.run_log(str(time.asctime()) + '. SCAN PROCESS COMPLETED\n')
-            print('\nScan Process Complete. You can begin the next scan')
-            
-            # Reset.. the reset variable
-            self.need_reset = False
-            self.rescan2 = False
+                lims_db_insert = "INSERT INTO samples (idorders, cnumber, tubelabel, Check_In_Timestamp, employee, Log, CLabels_to_print, boxnumber, sampletype, tissuetype, containertype, storagecondition, `condition`, retentiontime) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+                lims_db_insert_vals = (current_record[20].replace('\n',''), current_record[16].replace('\n',''), current_record[13], self.runtime, os.environ['USERNAME'], current_record[18], current_record[22], current_record[21], current_record[23], current_record[24], current_record[25], current_record[26], current_record[27], current_record[28])
+
+                print(lims_db_insert, lims_db_insert_vals)
+         
+                self.lims_db_cursor.execute(lims_db_insert, lims_db_insert_vals)
+                self.lims_db.commit()
+
+                
+                # SCNR LOG Mark completion of RESET
+                if self.need_reset == True:
+                    self.scan1_temp_img_path = self.temp_scan_img_save_dir_path + '\\' + os.environ['USERNAME'] + '_Scan1_' + str(self.unfinished_scnr_run_records[self.record_idx][0]).replace(':', ';') + '.jpg'
+                    self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Reset_attempt = 'True - Completed', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
+                    self.lims_db.commit()
+                    self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Reset_attempt = 'Completed', Time_stamp_of_associated_reset_record = '" + str(self.runtime) + "' WHERE Time_Stamp = '" + str(self.unfinished_scnr_run_records[self.record_idx][0]) + "'") # Mark the old need reset record as completed
+                    self.lims_db.commit()
+
+
+                # Mark Scan as Done in SCNR LOG
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET State = 'Done', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
+                self.lims_db.commit()
+
+                # Delete old images
+                os.remove(self.scan1_temp_img_path)
+                os.remove(self.scan2_temp_img_path)
+                self.run_log('\n\n' + str(time.asctime()) + '. Temp output files removed\n\n')
+                
+                self.run_log(str(time.asctime()) + '. SCAN PROCESS COMPLETED\n')
+                print('\nYou can begin the next scan')
+                
+                # Reset.. the reset variable
+                self.need_reset = False
+                self.rescan1 = False
+                self.rescan2 = False
+
+                # And the check point variables
+                self.ocr1_done = False
+                self.decode2_done = False
 
 
     def reset_prompts(self):
@@ -1207,18 +1361,45 @@ class scnr:
                 self.enter_params_window.destroy()
             except:
                 donothing=1
-                
+
+
             if 'Judge Scan 1' == self.unfinished_scnr_run_records[self.record_idx][5]:
-                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][9] + "', Vial_Type = '" + self.unfinished_scnr_run_records[self.record_idx][11] + "', Last_update_time = '"+str(datetime.now()) + "' WHERE Time_Stamp = '" + str(self.runtime) + "'")
-                self.lims_db.commit()
+
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][9] + "', Vial_Type = '" + self.unfinished_scnr_run_records[self.record_idx][11] + "', Last_update_time = '"+ \
+                                            str(datetime.now()) + "', User = '" + os.environ['USERNAME'] + "', CLabels_to_Print = '" + self.unfinished_scnr_run_records[self.record_idx][22] + "', Box_Number = '" + self.unfinished_scnr_run_records[self.record_idx][21] + \
+                                            "', Sample_Type = '" + self.unfinished_scnr_run_records[self.record_idx][23] + "', Tissue_Type = '" + self.unfinished_scnr_run_records[self.record_idx][24] + "', Container_Type = '" + \
+                                            self.unfinished_scnr_run_records[self.record_idx][25] + "', Storage_Condition = '" + self.unfinished_scnr_run_records[self.record_idx][26] + "', Arrival_Condition = '" + self.unfinished_scnr_run_records[self.record_idx][27] + \
+                                            "', Sample_Retention = '" + self.unfinished_scnr_run_records[self.record_idx][28] + "' WHERE Time_Stamp = '" + str(self.runtime) + "'")
+                
                                             
             elif 'Scan 2' == self.unfinished_scnr_run_records[self.record_idx][5]:
-                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][9] + "', Vial_Type = '" + self.unfinished_scnr_run_records[self.record_idx][11] + "', C_Number_Scan = '" + self.unfinished_scnr_run_records[self.record_idx][14] + "', Cnum_Label_Order_Number = " + self.unfinished_scnr_run_records[self.record_idx][15] + ", Cnum_Label_C_Number = " + self.unfinished_scnr_run_records[self.record_idx][16] + ", Last_update_time = '"+str(datetime.now()) + "' WHERE Time_Stamp = '" + str(self.runtime) + "'")
-                self.lims_db.commit()
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][9] + "', Vial_Type = '" + self.unfinished_scnr_run_records[self.record_idx][11] + "', C_Number_Scan = '" + \
+                                            self.unfinished_scnr_run_records[self.record_idx][14] + "', Cnum_Label_Order_Number = " + self.unfinished_scnr_run_records[self.record_idx][15] + ", Cnum_Label_C_Number = " + self.unfinished_scnr_run_records[self.record_idx][16] + \
+                                            ", Last_update_time = '"+str(datetime.now()) + "', User = " + os.environ['USERNAME'] + ", CLabels_to_Print = " + self.unfinished_scnr_run_records[self.record_idx][22] + ", Box_Number = " + self.unfinished_scnr_run_records[self.record_idx][21] + \
+                                            ", Sample_Type = " + self.unfinished_scnr_run_records[self.record_idx][23] + ", Tissue_Type = " + self.unfinished_scnr_run_records[self.record_idx][24] + ", Container_Type = " + \
+                                            self.unfinished_scnr_run_records[self.record_idx][25] + ", Storage_Condition = " + self.unfinished_scnr_run_records[self.record_idx][26] + ", Arrival_Condition = " + self.unfinished_scnr_run_records[self.record_idx][27] + \
+                                            ", Sample_Retention = " + self.unfinished_scnr_run_records[self.record_idx][28] + " WHERE Time_Stamp = '" + str(self.runtime) + "'")
 
             elif 'Judge Scan 2' == self.unfinished_scnr_run_records[self.record_idx][5]:
-                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][9] + "', CNumber_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][10] + "', Vial_Type = '" + self.unfinished_scnr_run_records[self.record_idx][11] + "', C_Number_Scan = '" + self.unfinished_scnr_run_records[self.record_idx][14] + "', Cnum_Label_Order_Number = " + self.unfinished_scnr_run_records[self.record_idx][15] + ", Cnum_Label_C_Number = " + self.unfinished_scnr_run_records[self.record_idx][16] + ", Cnum_Label_OCR = '" + self.unfinished_scnr_run_records[self.record_idx][17] + "', Last_update_time = '" + str(datetime.now()) + "' WHERE Time_Stamp = '" + str(self.runtime) + "'")
-                self.lims_db.commit()
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][9] + "', CNumber_Label_Image_Path = '" + self.unfinished_scnr_run_records[self.record_idx][10] + "', Vial_Type = '" + \
+                                            self.unfinished_scnr_run_records[self.record_idx][11] + "', C_Number_Scan = '" + self.unfinished_scnr_run_records[self.record_idx][14] + "', Cnum_Label_Order_Number = " + self.unfinished_scnr_run_records[self.record_idx][15] + \
+                                            ", Cnum_Label_C_Number = " + self.unfinished_scnr_run_records[self.record_idx][16] + ", Cnum_Label_OCR = '" + self.unfinished_scnr_run_records[self.record_idx][17] + "', Last_update_time = '" + str(datetime.now()) + \
+                                            "', User = " + os.environ['USERNAME'] + ", CLabels_to_Print = " + self.unfinished_scnr_run_records[self.record_idx][22] + ", Box_Number = " + self.unfinished_scnr_run_records[self.record_idx][21] + \
+                                            ", Sample_Type = " + self.unfinished_scnr_run_records[self.record_idx][23] + ", Tissue_Type = " + self.unfinished_scnr_run_records[self.record_idx][24] + ", Container_Type = " + \
+                                            self.unfinished_scnr_run_records[self.record_idx][25] + ", Storage_Condition = " + self.unfinished_scnr_run_records[self.record_idx][26] + ", Arrival_Condition = " + self.unfinished_scnr_run_records[self.record_idx][27] + \
+                                            ", Sample_Retention = " + self.unfinished_scnr_run_records[self.record_idx][28] + " WHERE Time_Stamp = '" + str(self.runtime) + "'")
+            self.lims_db.commit()
+
+            self.pci_employee = os.environ['USERNAME']
+            self.cLprint_store = self.unfinished_scnr_run_records[self.record_idx][22]
+            self.ordernum_store = self.unfinished_scnr_run_records[self.record_idx][20]
+            self.boxnum_store = self.unfinished_scnr_run_records[self.record_idx][21]
+            self.stype_store = self.unfinished_scnr_run_records[self.record_idx][23]
+            self.ttype_store = self.unfinished_scnr_run_records[self.record_idx][24]
+            self.ctype_store = self.unfinished_scnr_run_records[self.record_idx][25]
+            self.scond_store = self.unfinished_scnr_run_records[self.record_idx][26]
+            self.acond_store = self.unfinished_scnr_run_records[self.record_idx][27]
+            self.sret_store = self.unfinished_scnr_run_records[self.record_idx][28]
 
 
 
@@ -1240,8 +1421,7 @@ class scnr:
             self.vial_menu.grid(column=1, row=7)
 
             # Scan 1 button
-            self.scan1_button_text.set("Scan")
-            self.scan1_button.configure(bg='white')
+            self.scan1_button.configure(text='Scan',bg='white')
 
             # Accept button
             self.Approve_Scan1_button.destroy()
@@ -1260,8 +1440,7 @@ class scnr:
             print('un resetting scan 2\n')
 
             # Scan 1 button
-            self.scan1_button_text.set('Scan')
-            self.scan1_button = tk.Button(textvariable=self.scan1_button_text, command=self.main_scan_button, font=('Arial', 10), bg='white')
+            self.scan1_button = tk.Button(text='Scan', command=self.main_scan_button, font=('Arial', 10), bg='white')
             self.scan1_button.grid(column=0,row=5)
             
             # Delete button
@@ -1299,8 +1478,7 @@ class scnr:
             self.vial_menu.grid(column=1, row=7)
 
             # Scan 1 button
-            self.scan1_button_text.set('Scan')
-            self.scan1_button = tk.Button(textvariable=self.scan1_button_text, command=self.main_scan_button, font=('Arial', 10), bg='white')
+            self.scan1_button = tk.Button(text='Scan', command=self.main_scan_button, font=('Arial', 10), bg='white')
             self.scan1_button.grid(column=0,row=5)
             
             # Delete button
@@ -1328,7 +1506,8 @@ class scnr:
 
 
     def reset_previous_scan(self):
-
+        
+        # Scnr log idx
         # Indexes from unfinished scnr run records
         
         # 0 = Time stamp
@@ -1346,20 +1525,21 @@ class scnr:
         # 12 = Excel File
         # 13 = Client Label OCR
         # 14 = C Number Scan
-        # 15 = Order Num
-        # 16 = C Num
-        # 17 = C Number Label OCR
+        # 15 = C Num Label Order Number
+        # 16 = C Num Label C Number
+        # 17 = C Num Label OCR
         # 18 = Log
         # 19 = Last Update Time
         # 20 = Order Number
-        # 21 = CLabels to Print
-        # 22 = Box Number
+        # 21 = Box Number
+        # 22 = CLabels to Print
         # 23 = Sample Type
         # 24 = Tissue Type
         # 25 = Container Type
         # 26 = Storage Condition
         # 27 = Arrival Condition
         # 28 = Sample Retention
+        # 29 = Confirmed Client Tube Label
         
         print('\n')
         print(self.unfinished_scnr_run_records[self.record_idx])
@@ -1414,8 +1594,7 @@ class scnr:
             self.scan_result.configure(image=self.final_image)
             self.scan_result.image = self.final_image
 
-            self.scan1_button_text.set("Re-Scan Client Label")
-            self.scan1_button.configure(bg='red')
+            self.scan1_button.configure(text='Re-Scan Client Label',bg='red')
 
             # Params
             self.transfer_params(True)
@@ -1424,7 +1603,7 @@ class scnr:
             self.scan1_temp_img_path = self.unfinished_scnr_run_records[self.record_idx][9]
 
             # OCR
-            self.OCR(self.scan1_temp_img_path, 1)
+##            self.OCR(self.scan1_temp_img_path, 1)
 
             # Reset Prompts
             self.reset_prompts()
@@ -1469,9 +1648,7 @@ class scnr:
             self.scan_result.image = self.final_image
 
             # Create scan 2 button
-            self.scan2_button_text = tk.StringVar()
-            self.scan2_button_text.set('Scan')
-            self.scan2_button = tk.Button(textvariable=self.scan2_button_text, command=self.main_scan_button, font=('Arial', 10))
+            self.scan2_button = tk.Button(text='Scan', command=self.main_scan_button, font=('Arial', 10))
             self.scan2_button.grid(column=2,row=5)
 
             # Params
@@ -1528,9 +1705,7 @@ class scnr:
             self.scan_result2.image = self.final_image
             
             # Create scan 2 button
-            self.scan2_button_text = tk.StringVar()
-            self.scan2_button_text.set('Scan')
-            self.scan2_button = tk.Button(textvariable=self.scan2_button_text, command=self.main_scan_button, font=('Arial', 10))
+            self.scan2_button = tk.Button(text='Scan', command=self.main_scan_button, font=('Arial', 10))
             self.scan2_button.grid(column=2,row=5)
 
             # Scan 2 stuff
@@ -1545,39 +1720,87 @@ class scnr:
 
     def grayscale(self, scan_num):
         if scan_num == 1:
-            return cv.cvtColor(cv.imread(self.scan1_temp_img_path), cv.COLOR_BGR2GRAY)
+            return cv.cvtColor(cv.imread(self.cropped_scan1_temp_img_path), cv.COLOR_BGR2GRAY)
         if scan_num == 2:
-            return cv.cvtColor(cv.imread(self.scan2_temp_img_path), cv.COLOR_BGR2GRAY)
+            return cv.cvtColor(cv.imread(self.cropped_scan2_temp_img_path), cv.COLOR_BGR2GRAY)
 
 
-    def decode_dmatrix(self, scan_num):
+    def decode_dmatrix(self, crop_yesno):
+        dmatrix_was_read = False
+        binarized_dmatrix_was_read = False
+        self.one_read_correct = False
+
         print('\n################################################################')
         print('#  Decoding Data Matrix')
         print('################################################################\n')
 
+
+        if crop_yesno == 'crop':
+            self.dmatrix_read = decode(cv.imread(self.cropped_scan2_temp_img_path))
+            print('Un binarized Data Matrix reads: ')
+            print(self.dmatrix_read)
+
+
         # Original Img
-        self.dmatrix_read = decode(cv.imread(self.scan2_temp_img_path))
-        print('Un binarized Data Matrix reads: ')
-        print(self.dmatrix_read)
+        elif crop_yesno == 'orig':
+            self.dmatrix_read = decode(cv.imread(self.scan2_temp_img_path))
+            print('Un binarized Data Matrix reads: ')
+            print(self.dmatrix_read)
+
+            
+        # Data Matrix Scan Comparison
+        Program_C_Number_Scan_Header = tk.Label(self.window, text = 'C Number Read by CLDS:', font = ('Arial', 15), bg='white')
+        Program_C_Number_Scan_Header.grid(column=1, row=10)
         
-##        # Binarized Image
-##        gray_image = self.grayscale(2)
-##        thresh, im_bw = cv.threshold(gray_image, 125, 255, cv.THRESH_BINARY) # blocky, shadowy        
-##        self.dmatrix_read_binarized = decode(im_bw)
-##        print('\nBinarized Data Matrix reads: ')
-##        print(self.dmatrix_read_binarized)
-## 
-##        # Rotate 90 Img
-##        img_90 = Image.open(self.scan2_temp_img_path)
-##        self.dmatrix_rotate_90 = decode(img_90.rotate(90))
-##        print('\n+90 Degrees Rotated Data Matrix reads: ')
-##        print(self.dmatrix_rotate_90)
-## 
-##        # Rotate 270 Img
-##        img_270 = Image.open(self.scan2_temp_img_path)
-##        self.dmatrix_rotate_270 = decode(img_270.rotate(270))
-##        print('\n-90 Degrees Rotated Data Matrix reads: ')
-##        print(self.dmatrix_rotate_270)
+        if len(self.dmatrix_read) > 0:
+            dmatrix_was_read = True
+
+            
+        if dmatrix_was_read:
+            for i in range(len(self.dmatrix_read)):
+                if str(self.dmatrix_read[i].data) == ("b'"+self.cnum_input_from_external_scanner+"'") and self.one_read_correct != True:                                    
+                    self.Program_Cnumber_scan = tk.Label(self.window, bg='white', text=self.cnum_input_from_external_scanner) # scan read matched, copy value
+                    self.Program_Cnumber_scan.grid(column=1, row=11)                    
+                    self.one_read_correct = True
+
+
+        if self.one_read_correct == False:
+            print('\nThe programs data matrix reads did not match the original read. Please rescan the Cnumber label')
+            
+
+        else:
+            if crop_yesno == 'orig':
+                self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET State = 'Judge Scan 2', CNumber_Label_Image_Path = '" + self.mysql_ver_temp_img_save_path + r'\\' + os.environ['USERNAME'] + '_Scan2_' + str(self.runtime).replace(':', ';') + '.jpg' + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
+                self.lims_db.commit()
+
+                # Update Instructions
+                self.instructions.configure(text='Review the C-Number Label image and if it is clearly legible \nthen click the green Accept button. If not, click the scan \nbutton until a good image of the label is obtained.')
+
+                # Rescan button
+                self.scan2_button.configure(text = 'Re-Scan C-Num Label',state='normal',bg='red')
+                
+                # Accept button
+                self.Approve_Scan2_button = tk.Button(self.window, text='Accept', command=self.scan_approved, font=('Arial', 10), bg='green')
+                self.Approve_Scan2_button.grid(column=2,row=6)
+
+
+            elif crop_yesno == 'crop':
+
+                self.decode2_done = True
+
+                # Re scan
+                self.scan2_button = tk.Button(self.window, text='Re-Scan C-Number Label', command=self.main_scan_button, font=('Arial', 10), bg='Red')
+                self.scan2_button.grid(column=2,row=5)
+                
+                # Recrop button
+                self.recrop_button2 = tk.Button(self.window, text='Re-Crop', command=lambda: self.crop_final_img(2,True), font=('Arial', 10), bg='Red')
+                self.recrop_button2.grid(column=2,row=6)
+
+                # Accept button
+                self.Approve_Scan2_button = tk.Button(self.window, text='Accept', command=self.scan_approved, font=('Arial', 10), bg='Green')
+                self.Approve_Scan2_button.grid(column=2,row=7)
+
+    
 
 
 
@@ -1585,7 +1808,7 @@ class scnr:
         pytesseract.pytesseract.tesseract_cmd = r'C:\Users\efu\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
         
         print('\n\n################################################################')
-        print('#  Reading text from Image:')
+        print('#  Reading text from Cropped Image:')
         print('################################################################')
 
         self.ocr = pytesseract.image_to_string(Image.open(path), config='--psm 1')# --oem 4')        
@@ -1602,90 +1825,289 @@ class scnr:
             #idprojects         ???
             #checkindate        done
             #animalspecies      done
-            #animalgroup        obsolete
+            #animalgroup        done - put in db
             #animalid           obsolete
             #sex                done
-            #datecollected      need from tube?
-            #daycollected       need from tube?
+            #datecollected      done - put in db
+            #daycollected       done - put in db
 
             gray_image = self.grayscale(1)
             thresh, im_bw = cv.threshold(gray_image, 125, 255, cv.THRESH_BINARY) # blocky, shadowy        
             self.binarized_ocr = pytesseract.image_to_string(im_bw, config='--psm 1')# --oem 4')
             
-            print('\nBinarized OCR\n-----------------------------------------------------------------')
+            print('Binarized OCR\n-----------------------------------------------------------------')
             print(self.binarized_ocr)
             print('-----------------------------------------------------------------')
-            
-            # Reg ex vars
-            search_phrase_found,sample_type,checkin_date,animalspecies,animalgroup,animalid,sex,tissue_type,tissuesegmentnumber,datecollected,daycollected=False,'','','','','','','','','',''
 
-            # Check the search phrase table
+            # User edits OCR
+            user_confirmed_tube_label = tk.simpledialog.askstring("Tube Label", "Please correct or confirm the Tube Label for this sample", initialvalue=self.ocr.replace('\n', ' '))
+            self.label = user_confirmed_tube_label.lower().replace(':',' ')
+                        
+            # Init 'macro' vars
+            self.search_phrase_found,self.sample_type,self.checkin_date,self.animalspecies,self.animalgroup,self.animalid,self.sex,self.tissue_type,self.tissuesegmentnumber,self.datecollected,self.daycollected,self.esit_idx,self.group,self.grp=False,'','','','','','','','','','','','',''
+
+
+############# Extract Date   (100% of dates in testing -- 492 samples)
+            self.date=''
+            label_space_split = self.label.split(' ')
+            now = datetime.now
+            month_list = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec','january','february','march','april','june','july','august','september','october','november','december']
+            month_detected = ''
+            for x in month_list:
+                if x in self.label:
+                    label_space_split = self.label.split(' ')
+                    label_stripped = self.label.replace(' ', '')
+                    m_index = label_stripped.index(x)
+                    #Datefinder has trouble when month abbreviations are used
+                    #ddyyyy extraction
+                    if label_stripped[m_index-2:m_index].isnumeric() and label_stripped[m_index+len(x):m_index+len(x)+4].isnumeric():
+                        matches = list(datefinder.find_dates(label_stripped[m_index-2:(m_index+len(x)+4)], strict=True))
+                        if len(matches) > 0:
+                            self.date = matches[0]
+                    #ddyy extraction
+                    elif label_stripped[m_index-2:m_index].isnumeric() and label_stripped[m_index+len(x):m_index+len(x)+2].isnumeric():
+                        matches = list(datefinder.find_dates(label_stripped[m_index-2:(m_index+ len(x)+2)], strict=True))
+                        if len(matches) > 0:
+                            self.date = matches[0]
+                    #yyyydd extraction
+                    elif label_stripped[m_index-4:m_index].startswith('20'):
+                        if label_stripped[m_index+len(x):m_index+len(x)+2].isnumeric():
+                            matches = list(datefinder.find_dates(label_stripped[m_index+len(x):m_index+len(x)+2]+x+label_stripped[m_index-4], strict=True))
+                            if len(matches) > 0:
+                                self.date = matches[0]
+                    #dd_monthabbrev with no year extraction     
+                    if self.date=='':
+                        for i in label_space_split:
+                            if x in i:
+                                try:
+                                    self.date = datetime.strptime(i, '%d%b')
+                                    self.date = self.date.replace(year=strftime('%Y'))
+                                    if self.date > now:
+                                        self.date = self.date - relativedelta(years = 1)
+                                except:
+                                    donothing=1
+            # mmddyyyy with no separators extraction 
+            if self.date=='':
+                for i in label_space_split:
+                    if len(i)==8 and i.isnumeric() and '202' in i:
+                        try:
+                            self.date = datetime.strptime(i,'%m%d%Y')
+                        except:
+                            self.date = datetime.strptime(i,'%Y%m%d')
+                        finally:
+                            donothing=1
+                    elif self.date=='':
+                        matches = list(datefinder.find_dates(i, strict=True))
+                        if len(matches) > 0:
+                            self.date = matches[0]
+            # plan z
+            if self.date=='':
+                label2 = self.label.replace('-',' ')
+                matches = list(datefinder.find_dates(label2, strict=True))
+                if len(matches) > 0:
+                    self.date = matches[0]
+                    
+                    
+############# Day / Week Collected    (99.3% of days in testing) (99.9% of weeks in testing) (7021,922 samples)
+            label1 = self.label.lower()
+            label1 = label1.replace(':','').replace('s','').replace('/','').replace('v',' ').replace('(','').replace(')','').replace('#','').replace('-','').replace('day',' day ').replace('_',' ').replace('week',' week ').replace('  ',' ')
+            label_stripped = label1.split(' ')
+            self.day = ''
+            self.week = ''
+            if 'day' in label1:
+                fwd=False
+                for i in range(len(label_stripped)):
+                    if 'day' in label_stripped[i]:
+                        day_idx = i
+                if day_idx < len(label_stripped)-1:
+                    if label_stripped[day_idx+1].isnumeric():
+                        fwd=True
+                        self.day = label_stripped[day_idx+1]
+                if day_idx >= 1:
+                    if label_stripped[day_idx-1].isnumeric():
+                        if fwd==True:
+                            if int(label_stripped[day_idx-1]) < int(label_stripped[day_idx+1]):
+                                self.day = label_stripped[day_idx-1]
+                        else:
+                            self.day = label_stripped[day_idx-1]
+                if self.day == '':
+                    donothing=1
+                elif int(self.day)>150:
+                    smaller=False
+                    if any(char.isdigit() for char in label_stripped[day_idx+1]):
+                        n=0
+                        while label_stripped[day_idx+1][n].isnumeric():
+                            n+=1
+                        if 0<n-1<=3:
+                            if int(label_stripped[day_idx+1][:n]) < int(self.day):
+                                smaller=True
+                                self.day = int(label_stripped[day_idx+1][:n])
+            if 'week' in label1:
+                week_fwd=False
+                for i in range(len(label_stripped)):
+                    if 'week' in label_stripped[i]:
+                        week_idx = i
+                if week_idx < len(label_stripped)-1:
+                    if label_stripped[week_idx+1].isnumeric():
+                        week_fwd=True
+                        self.week = label_stripped[week_idx+1]
+                if week_idx >= 1:
+                    if label_stripped[week_idx-1].isnumeric():
+                        if fwd==True:
+                            if int(label_stripped[week_idx-1]) < int(label_stripped[week_idx+1]):
+                                self.week = label_stripped[week_idx-1]
+                        else:
+                            self.week = label_stripped[week_idx-1]
+
+            
+############# Gender
+            if 'male' in self.label or ' m ' in self.label or '(m)' in self.label:
+                self.sex = 'male'
+            elif 'female' in self.label or ' f ' in self.label or '(f)' in self.label:
+                self.sex = 'female'
+
+
+############# Animal Species
+            if 'human' in self.label:
+                self.animalspecies='Human'
+                run_log('Species Detected')
+            elif 'mouse' in self.label:
+                self.animalspecies='Mouse'
+                run_log('Species Detected')
+            elif 'rat' in self.label:
+                self.animalspecies='Rat'
+                run_log('Species Detected')
+            elif 'monkey' in self.label:
+                self.animalspecies='Monkey'
+                run_log('Species Detected')
+            elif 'swine' in self.label:
+                self.animalspecies='Swine'
+                run_log('Species Detected')
+            elif 'rabbit' in self.label:
+                self.animalspecies='Rabbit'
+                run_log('Species Detected')
+            elif 'human' in self.label:
+                self.animalspecies='Human'
+                run_log('Species Detected')
+
+
+
+############# Check the search phrase table
             self.lims_db_cursor.execute("SELECT * FROM determine_sample_characteristics")
-            extract_sample_info_table = self.lims_db_cursor.fetchall()
+            self.extract_sample_info_table = self.lims_db_cursor.fetchall()
+            self.checkin_date = datetime.now().strftime('%Y-%m-%d')
+            self.tissuesegmentnumber = 'O'
 
-            # Init vars
-            checkin_date = datetime.now().strftime('%Y-%m-%d')
-            tissuesegmentnumber = 'O'
-
-            # Animal Species
-            if 'male' in str(self.ocr).lower() or ' m ' in str(self.ocr).lower():
-                sex = 'male'
-            elif 'female' in str(self.ocr).lower() or ' f ' in str(self.ocr).lower():
-                sex = 'female'
-
-            # Gender
-            if 'human' in str(self.ocr).lower():
-                animalspecies='Human'
-            elif 'mouse' in str(self.ocr).lower():
-                animalspecies='Mouse'
-            elif 'rat' in str(self.ocr).lower():
-                animalspecies='Rat'
-            elif 'monkey' in str(self.ocr).lower():
-                animalspecies='Monkey'
-            elif 'swine' in str(self.ocr).lower():
-                animalspecies='Swine'
-            elif 'rabbit' in str(self.ocr).lower():
-                animalspecies='Rabbit'
-            elif 'human' in str(self.ocr).lower():
-                animalspecies='Human'
-
-            # Day Collected
-##            for char in range(len(str(self.ocr).lower()):
-##                if char
-##
-##
-##            if 'week' in str(self.ocr).lower():
-##                    
-##            elif 'day' in str(self.ocr).lower():
-
-
-            # Locate search phrase
-            for i in range(len(extract_sample_info_table)):
-                if extract_sample_info_table[i][0] in str(self.ocr):
-                    
-                    search_phrase_found = True
-
-                    tissuesegmentnumber = extract_sample_info_table[i][1]
-                    sample_type = extract_sample_info_table[i][2]
-                    tissue_type = extract_sample_info_table[i][3]
-                    
+            
+############# Locate search phrase
+            for i in range(len(self.extract_sample_info_table)):
+                if self.extract_sample_info_table[i][0] in str(self.ocr):
+                    self.search_phrase_found = True
+                    self.esit_idx = i
+                    self.tissuesegmentnumber = self.extract_sample_info_table[i][1]
+                    self.sample_type = self.extract_sample_info_table[i][2]
+                    self.tissue_type = self.extract_sample_info_table[i][3]
                     break
+            if self.search_phrase_found == False: #Not found
+                self.sample_type = "Other"
+                self.tissue_type = "Other"
 
-            if search_phrase_found == False: #Just put OCR into LIMS
-                sample_type = "Other"
-                tissue_type = "Other"
-                print('\nNo search phrases found')
-            
-##            else: #Put other fields into LIMS too
-##                self.lims_db.execute("UPDATE avancelims.samples SET sample_type 
+
+############# Animal Group  (100% of groups in testing) (100% of grps in testing) (1265,6178 samples)
+            label1 = self.label.lower()
+            label1 = label1.replace(':','').replace('/','').replace('(','').replace(')','').replace('#','').replace('-','').replace(',','').replace(';','').replace('group',' group ').replace('grp',' grp ').replace('  ',' ')
+            label_stripped = label1.split(' ')
+            if 'group' in label1:
+                self.group = ''
+                for i in range(len(label_stripped)):
+                    if 'group' in label_stripped[i]:
+                        group_idx=i
+                if group_idx < len(label_stripped)-1:
+                    if label_stripped[group_idx+1].isnumeric() or label_stripped[group_idx+1][1:].isnumeric() or len(label_stripped[group_idx+1])==1 or (label_stripped[group_idx+1][:1].isnumeric() and label_stripped[group_idx+1][2:].isnumeric()):
+                        self.group = label_stripped[group_idx+1]
+            if 'grp' in label1:
+                self.grp = ''
+                for i in range(len(label_stripped)):
+                    if 'grp' in label_stripped[i]:
+                        grp_idx=i
+                if grp_idx < len(label_stripped)-1:
+                    if label_stripped[grp_idx+1].isnumeric() or label_stripped[grp_idx+1][1:].isnumeric() or len(label_stripped[grp_idx+1])==1 or (label_stripped[grp_idx+1][:1].isnumeric() and label_stripped[grp_idx+1][2:].isnumeric()):
+                        self.grp = label_stripped[grp_idx+1]
+
+
+############# Animal ID
+##            label1 = label.lower().replace('kid','kyd').replace('covid','covyd').replace('rid','ryd').replace('ids','id').replace('acid','acyd').replace('eyelid','eyelyd').replace('mid','myd').replace('oid','oyd').replace('#','').replace(':',' ').replace('_',' ')
+            self.animal_id = ''
+            self.a_id_label_stripped = self.label.split(' ')
+
+            if self.id_exists == False:
+                labels_have_animal_id = tk.messagebox.askyesno('Animal ID', 'Do your batch of sample tubes have Animal IDs marked on the tube labels?')
+
+                if labels_have_animal_id:
+                    self.id_exists = True
+                    self.id_mode = 'cancel'
+
+                    # Prevent closing the animal id window
+                    def disable_event():
+                        pass
+                        
+                    self.animal_id_window = tk.Tk()
+                    self.animal_id_window.title("Help Identify Animal ID")
+                    self.animal_id_window.geometry("400x200")
+                    self.animal_id_window.configure(bg='white')
+                    self.animal_id_window.lift()
+
+                    self.animal_id_window_instructions = tk.Label(self.animal_id_window, text = 'Provide a string of text that consistently precedes the Animal ID \nor one that the Animal ID consistently begins with', font=('Arial', 10), bg='white')
+                    self.animal_id_window_instructions.pack()
+
+                    empty = tk.Label(self.animal_id_window)
+                    empty.pack()
+
+                    self.animal_id_pattern = tk.Entry(self.animal_id_window, width = 40)
+                    self.animal_id_pattern.pack()
+
+                    precedes_id_button = tk.Button(self.animal_id_window, text='Precedes Animal ID', command=lambda: self.get_animal_id(self.animal_id_pattern,'precedes'), font=('Arial', 9), bg='white')
+                    precedes_id_button.pack()
+
+                    id_begins_button = tk.Button(self.animal_id_window, text='Animal ID begins with', command=lambda: self.get_animal_id(self.animal_id_pattern,'begins'), font=('Arial', 9), bg='white')
+                    id_begins_button.pack()
+
+                    cancel_id_button = tk.Button(self.animal_id_window, text='Cancel', command=lambda: self.get_animal_id(self.animal_id_pattern,'cancel'), font=('Arial', 9), bg='white')
+                    cancel_id_button.pack()
+
+                    self.animal_id_window.protocol("WM_DELETE_WINDOW", disable_event)
+
+                else:
+                    self.ocr1_done = True
+                    self.scan_approved()
+
+            else:
+                self.get_animal_id(self.animal_id_pattern, self.id_mode)
                 
-            self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Client_Label_OCR = '" + self.ocr + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
-            
-##            self.user_confirmed_tube_label = tk.simpledialog.askstring("Tube Label", "Please correct or confirm the Tube Label for this sample")
-            
         elif scan_num == 2:
             self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Cnum_Label_OCR = '" + self.ocr + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
+
         self.lims_db.commit()
+
+
+
+
+    def get_animal_id(self,text,mode):
+        self.id_mode = mode
+        if mode == 'begins':
+            for i in range(len(self.a_id_label_stripped)):
+                if self.a_id_label_stripped[i].startswith(text.get()):
+                    self.animal_id = self.a_id_label_stripped[i]    
+        elif mode == 'precedes':
+            for i in range(len(self.a_id_label_stripped)):
+                if text.get() in self.a_id_label_stripped[i]:
+                    self.animal_id = self.a_id_label_stripped[i+1]    
+        elif mode == 'cancel':
+            self.id_exists = False
+        self.animal_id_window.destroy()
+        self.ocr1_done = True
+        self.scan_approved()
+
 
 
     def next_vial(self, vial_type):
@@ -1702,13 +2124,12 @@ class scnr:
 
         self.Cnumber_scan.destroy()
         self.Program_Cnumber_scan.destroy()
-                # Reset instructions
+
+        # Reset instructions
         self.instructions.configure(text='Select the Vial Type from the drop down list below, select the \ncorrect vial adapter and put the vial and adapter on the turntable. \nEnsure the focus is good, the vial is centered, and then click \nthe blue Scan button to capture the Client Label image.')            
 
         # Reset Scan button
-##        self.scan1_button_text = tk.StringVar()
-        self.scan1_button_text.set('Scan')
-        self.scan1_button = tk.Button(textvariable=self.scan1_button_text, command=self.main_scan_button, font=('Arial', 10))
+        self.scan1_button = tk.Button(text='Scan', command=self.main_scan_button, font=('Arial', 10))
         self.scan1_button.grid(column=0,row=5)
 
         # Vial Drop Down Menu
@@ -1746,8 +2167,6 @@ class scnr:
         
     def scan2_process(self):
         
-        self.next_action = 'JUDGE SCAN 2'
-
         if self.need_reset == False: # Already exists when resetting judge scan 2
             self.scan2_temp_img_path = self.temp_scan_img_save_dir_path + '\\' + os.environ['USERNAME'] + '_Scan2_' + str(self.runtime).replace(':', ';') + '.jpg'
             Image.fromarray(self.img_rgb).save(self.scan2_temp_img_path)
@@ -1756,7 +2175,8 @@ class scnr:
                 self.scan2_temp_img_path = self.temp_scan_img_save_dir_path + '\\' + os.environ['USERNAME'] + '_Scan2_' + str(self.runtime).replace(':', ';') + '.jpg'
                 Image.fromarray(self.img_rgb).save(self.scan2_temp_img_path)
 
-            
+        self.next_action = 'JUDGE SCAN 2'
+    
         # Update preview with final 2 images:
         img2 = (Image.open(self.scan2_temp_img_path))
         self.scan_img2_width, self.scan_img2_height = img2.size
@@ -1767,73 +2187,7 @@ class scnr:
         self.scan_result2.image = self.final_image2
 
         # Data Matrix
-        self.decode_dmatrix(2)
-        
-        # Data Matrix Scan Comparison
-        Program_C_Number_Scan_Header = tk.Label(self.window, text = 'C Number Read by CLDS:', font = ('Arial', 15), bg='white')
-        Program_C_Number_Scan_Header.grid(column=1, row=10)
-
-        dmatrix_was_read = False
-        binarized_dmatrix_was_read = False
-        dmatrix_rotate_90_was_read = False
-        dmatrix_rotate_270_was_read = False
-        self.one_read_correct = False
-        
-        if len(self.dmatrix_read) > 0:
-            dmatrix_was_read = True
-
-##        if len(self.dmatrix_read_binarized) > 0:
-##            binarized_dmatrix_was_read = True
-            
-        if dmatrix_was_read:
-            for i in range(len(self.dmatrix_read)):
-                if str(self.dmatrix_read[i].data) == ("b'"+self.cnum_input_from_external_scanner+"'") and self.one_read_correct != True:                                    
-                    self.Program_Cnumber_scan = tk.Label(self.window, bg='white', text=self.cnum_input_from_external_scanner) # scan read matched, copy value
-                    self.Program_Cnumber_scan.grid(column=1, row=11)                    
-                    self.one_read_correct = True
-
-##                        elif binarized_dmatrix_was_read and self.one_read_correct != True:
-##                            for i in range(len(self.dmatrix_read_binarized)):
-##                                if str(self.dmatrix_read_binarized[i].data) == ("b'"+self.cnum_input_from_external_scanner+"'") and self.one_read_correct != True:                                    
-##                                    self.Program_Cnumber_scan = tk.Label(self.window, bg='white', text=self.cnum_input_from_external_scanner) # scan read matched, copy value
-##                                    self.Program_Cnumber_scan.grid(column=1, row=11)                                                                               
-##                                    self.one_read_correct = True
-## 
-##                        elif dmatrix_rotate_90_was_read and self.one_read_correct != True:
-##                            for i in range(len(self.dmatrix_rotate_90)):
-##                                if str(self.dmatrix_rotate_90[i].data) == ("b'"+self.cnum_input_from_external_scanner+"'") and self.one_read_correct != True:                                    
-##                                    self.Program_Cnumber_scan = tk.Label(self.window, bg='white', text=self.cnum_input_from_external_scanner) # scan read matched, copy value
-##                                    self.Program_Cnumber_scan.grid(column=1, row=11)                                 
-##                                    self.one_read_correct = True
-## 
-##                        elif dmatrix_rotate_270_was_read and self.one_read_correct != True:
-##                            for i in range(len(self.dmatrix_rotate_90)):
-##                                if str(self.dmatrix_rotate_270[i].data) == ("b'"+self.cnum_input_from_external_scanner+"'") and self.one_read_correct != True:                                    
-##                                    self.Program_Cnumber_scan = tk.Label(self.window, bg='white', text=self.cnum_input_from_external_scanner) # scan read matched, copy value
-##                                    self.Program_Cnumber_scan.grid(column=1, row=11)                                                                               
-##                                    self.one_read_correct = True
-                    
-
-        if self.one_read_correct == False:
-            print('\nThe programs data matrix reads did not match the original read. Please rescan the Cnumber label')
-
-        else:
-            self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET State = 'Judge Scan 2', CNumber_Label_Image_Path = '" + self.mysql_ver_temp_img_save_path + r'\\' + os.environ['USERNAME'] + '_Scan2_' + str(self.runtime).replace(':', ';') + '.jpg' + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
-            self.lims_db.commit()
-
-            # Update Instructions
-            self.instructions.configure(text='Review the C-Number Label image and if it is clearly legible \nthen click the green Accept button. If not, click the scan \nbutton until a good image of the label is obtained.')
-            
-            # OCR
-            self.OCR(self.scan2_temp_img_path, 2)
-            
-            # Accept button
-            self.Approve_Scan2_button = tk.Button(self.window, text='Accept', command=self.scan_approved, font=('Arial', 10), bg='green')
-            self.Approve_Scan2_button.grid(column=2,row=6)
-
-        # Rescan 2
-        self.scan2_button_text.set("Re-Scan C-Number Label")
-        self.scan2_button.configure(state='normal', bg='red')
+        self.decode_dmatrix('orig')
 
 
         
@@ -1852,42 +2206,10 @@ class scnr:
         print('Active Threads (at very end of program): ' + str(threading.active_count()))
         print('Done')
 
-##
-##        
-##        import traceback
-##        exc_type, exc_value, exc_traceback = sys.exc_info()
-##        error_string = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-##
-##        scnr_db_connect = mysql.connector.connect(host="192.168.21.96",user="teracopy",password="T3RA_copy!",database="avancelims", auth_plugin='mysql_native_password')
-##        db_cursor = scnr_db_connect.cursor()
-##        db_cursor.execute("UPDATE avancelims.scnr_log SET Reset_attempt = 'True but error prevented reset completion' WHERE Time_Stamp = '" + str(scnr().runtime) + "'") # Database
-##        with open(self.config_and_log_path_on_45drives + '\\' + 'SCNR_Log.txt', 'a') as z:
-##            z.write('\n\n################################\n' + error_string + '\n\n################################')
-##        with open(self.config_and_log_path_on_45drives + '\\' + 'SCNR_Log.txt', 'r') as r: # Read Log, write to database
-##            log = r.read()
-##        db_cursor.execute("UPDATE avancelims.scnr_log SET Log = '" + log + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
-##        scnr_db_connect.commit()
-##        os._exit(0)
-##
-##
-##
-##    def exit_handler(self, err_msg):
-##        print('exiting')
-##        exc_type, exc_value, exc_traceback = sys.exc_info()
-##        err_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-##        
-##        print(err_msg)
-##        self.run_log('\n\n############################################\n' + err_msg)
-##
-##        self.lims_db_cursor.execute("UPDATE avancelims.scnr_log SET Scan_In_Progress = 'False' WHERE Time_Stamp = '"+str(self.runtime)+"'") # Database
-##        self.lims_db.commit()
-        
 
 
 # MAIN:
 if __name__ == '__main__':
-##    try:
-
 
     
     #Validation
@@ -1897,25 +2219,16 @@ if __name__ == '__main__':
 
     if platform.system() != 'Windows':
         print('')
-        print('This program is only validated on Windows OS, You are using ' + str(platform.system()))
         run_log('This program is only validated on Windows OS, You are using ' + str(platform.system()))
         print('')
 
     if platform.python_version() != '3.9.6':
         print('')
-        print('This program is only validated on Python ver 3.9.6, You are using ' + str(platform.python_version()))
         run_log('This program is only validated on Python ver 3.9.6, You are using ' + str(platform.python_version()))
         print('')
 
-##    if xw.__version__ != '0.25.3':
-##        print('')
-##        print('This program is only validated on XLwings ver 0.25.3, You are using ' + str(xw.__version__))
-##        run_log('This program is only validated on XLwings ver 0.25.3, You are using ' + str(xw.__version__))
-##        print('')
-
     if pkg_resources.get_distribution("DateTime").version != '4.3':
         print('')
-        print('This program is only validated on DateTime version 4.3, You are using ' + str(pkg_resources.get_distribution("DateTime").version))
         run_log('This program is only validated on DateTime version 4.3, You are using ' + str(pkg_resources.get_distribution("DateTime").version))
         print('')
 
@@ -1923,23 +2236,3 @@ if __name__ == '__main__':
 
 
 
-
-
-##    except BaseException as e:
-##        print('exception')
-##        import traceback
-##        exc_type, exc_value, exc_traceback = sys.exc_info()
-##        error_string = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-##
-##        print('eroooooor')
-##        print(error_string)
-##
-##        scnr_db_connect = mysql.connector.connect(host="192.168.21.96",user="teracopy",password="T3RA_copy!",database="avancelims", auth_plugin='mysql_native_password')
-##        db_cursor = scnr_db_connect.cursor()
-##        db_cursor.execute("UPDATE avancelims.scnr_log SET Reset_attempt = 'True but error prevented reset completion' WHERE Time_Stamp = '" + str(scnr().runtime) + "'") # Database
-##        with open(self.config_and_log_path_on_45drives + '\\' + 'SCNR_Log.txt', 'a') as z:
-##            z.write('\n\n################################\n' + error_string + '\n\n################################')
-##        with open(self.config_and_log_path_on_45drives + '\\' + 'SCNR_Log.txt', 'r') as r: # Read Log, write to database
-##            log = r.read()
-##        db_cursor.execute("UPDATE avancelims.scnr_log SET Log = '" + log + "', Last_update_time = '"+str(datetime.now())+"' WHERE Time_Stamp = '" + str(self.runtime) + "'") # Database
-##        scnr_db_connect.commit()
