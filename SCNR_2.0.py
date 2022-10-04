@@ -844,6 +844,7 @@ class scnr:
         mysocket.close()
 
 
+
     def create_runlog_and_check_for_records_to_reset(self):
         
         # Run Log
