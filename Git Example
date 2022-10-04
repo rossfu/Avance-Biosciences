@@ -1,0 +1,71 @@
+U:\>C:
+
+C:\>cd C:\users\efu\Desktop\slitscan
+
+C:\Users\efu\Desktop\slitscan>git clone https://github.com/Avance-Biosciences/SCNR.git
+Cloning into 'SCNR'...
+info: please complete authentication in your browser...
+remote: Enumerating objects: 7, done.
+remote: Counting objects: 100% (7/7), done.
+remote: Compressing objects: 100% (5/5), done.
+remote: Total 7 (delta 2), reused 6 (delta 1), pack-reused 0
+Receiving objects: 100% (7/7), done.
+Resolving deltas: 100% (2/2), done.
+
+C:\Users\efu\Desktop\slitscan>cd SCNR
+
+C:\Users\efu\Desktop\slitscan\SCNR>git status
+On branch master
+Your branch is up to date with 'origin/master'.
+
+nothing to commit, working tree clean
+
+C:\Users\efu\Desktop\slitscan\SCNR>git checkout -b
+error: switch `b' requires a value
+
+C:\Users\efu\Desktop\slitscan\SCNR>git checkout -b ross_dev
+Switched to a new branch 'ross_dev'
+
+C:\Users\efu\Desktop\slitscan\SCNR>git status
+On branch ross_dev
+nothing to commit, working tree clean
+
+C:\Users\efu\Desktop\slitscan\SCNR>git status
+On branch ross_dev
+nothing to commit, working tree clean
+
+C:\Users\efu\Desktop\slitscan\SCNR>git status
+On branch ross_dev
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   scnr.py
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+C:\Users\efu\Desktop\slitscan\SCNR>git add scnr.py
+
+C:\Users\efu\Desktop\slitscan\SCNR>git commit -m "branch push test"
+[ross_dev 10560de] branch push test
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+C:\Users\efu\Desktop\slitscan\SCNR>git push origin ross_dev
+Enumerating objects: 5, done.
+Counting objects: 100% (5/5), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (3/3), done.
+Writing objects: 100% (3/3), 326 bytes | 326.00 KiB/s, done.
+Total 3 (delta 1), reused 0 (delta 0), pack-reused 0
+remote: Resolving deltas: 100% (1/1), completed with 1 local object.
+remote:
+remote: Create a pull request for 'ross_dev' on GitHub by visiting:
+remote:      https://github.com/Avance-Biosciences/SCNR/pull/new/ross_dev
+remote:
+To https://github.com/Avance-Biosciences/SCNR.git
+ * [new branch]      ross_dev -> ross_dev
+
+C:
+Cd C:\users\efu\Desktop\slitscan\SCNR\SCNR2.0
+git add SCNR_2.0.py
+Git commit -m "msg"
+Git push origin ross_dev
