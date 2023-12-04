@@ -1,0 +1,1 @@
+python3 -W ignore C:\nifi-1.21.0\scripts\7900doc.py %1 %2

@@ -1,0 +1,1 @@
+python3 -W ignore C:\nifi-1.23.2\scripts\fuji_film.py %1 %2
