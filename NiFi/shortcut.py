@@ -35,7 +35,7 @@ def set_folder_hidden_status(path, hide=True):
 
 
 
-def create_shortcut(dest_path, old_path): 
+def create_shortcut(dest_path, old_path):
     # FIND PROJECT ID:
     match = re.search(r'[A-Z]{3}\d{6}', dest_path)
     if match:
@@ -45,17 +45,22 @@ def create_shortcut(dest_path, old_path):
     else:
         unspecified = True
         project = "NA"
+
     with open('C:\\nifi-1.24.0\\log_shortcut.txt', 'a') as file: file.write(f"project: {project}\n")
 
     # If ProjectID is specified, check if it exists in the AllCurrentProjects directory:
-    if unspecified == False and not os.path.isdir("//45drives/hometree/Operations/Projects/AllCurrentProjects/{0}".format(project)):
-        with open('C:\\nifi-1.24.0\\log_shortcut.txt', 'a') as file: file.write("create folder in AllCurrentProject: //45drives/hometree/Operations/Projects/AllCurrentProjects/{0}\n".format(project))
+    if unspecified == False and not os.path.isdir("//softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/{0}".format(project)):
+        with open('C:\\nifi-1.24.0\\log_shortcut.txt', 'a') as file: file.write("create folder in AllCurrentProject: //softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/{0}\n".format(project))
 
         # [no proj. dir. we need to copy template into place]:
-        shutil.copytree("//45drives/hometree/Operations/Projects/AllCurrentProjects/_ProjectTemplate", "//45drives/hometree/Operations/Projects/AllCurrentProjects/{0}".format(project))
+        try:
+            shutil.copytree("//softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/_ProjectTemplate", "//softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/{0}".format(project))
+        except:
+            # Sometimes we get errors that the directory already exists.. despite there being a direct check for this above.
+            pass
 
         # Get folders to hide:
-        folder_path = "//45drives/hometree/Operations/Projects/AllCurrentProjects/{0}/DataLinks".format(project)
+        folder_path = "//softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/{0}/DataLinks".format(project)
         folders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
 
         # Iterate over the folders, hiding each:
@@ -65,8 +70,8 @@ def create_shortcut(dest_path, old_path):
     
     #create unspecified folder if it doesn't exist:
     if unspecified:
-        if not os.path.isdir("//45drives/hometree/Operations/Projects/AllCurrentProjects/unspecified"):
-            os.mkdir("//45drives/hometree/Operations/Projects/AllCurrentProjects/unspecified")
+        if not os.path.isdir("//softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/unspecified"):
+            os.mkdir("//softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/unspecified")
 
     # try to create shortcut to files:
     try:
@@ -78,9 +83,9 @@ def create_shortcut(dest_path, old_path):
 
         if unspecified:
             with open('C:\\nifi-1.24.0\\log_shortcut.txt', 'a') as file: file.write(f"unspecified\n")
-            target_path  = fr"\\45drives\hometree\DataWorkFolder\{current_year}\{instrument}\{asset}\{old_path}" #assets are in target path
-            shortcut_path= fr"\\45drives\hometree\Operations\Projects\AllCurrentProjects\unspecified\{instrument}\{asset}\{old_path}.lnk" #organize unspecified
-            #shortcut_path= fr"\\45drives\hometree\Operations\Projects\AllCurrentProjects\unspecified\{filename}.lnk"
+            target_path  = fr"\\softtest\Quality\hometree\DataWorkFolder\{current_year}\{instrument}\{asset}\{old_path}" #assets are in target path
+            shortcut_path= fr"\\softtest\Quality\hometree\Operations\Projects\AllCurrentProjects\unspecified\{instrument}\{asset}\{old_path}.lnk" #organize unspecified
+            #shortcut_path= fr"\\softtest\Quality\hometree\Operations\Projects\AllCurrentProjects\unspecified\{filename}.lnk"
             os.makedirs(os.path.dirname(shortcut_path), exist_ok=True)
 
             with open('C:\\nifi-1.24.0\\log_shortcut.txt', 'a') as file: file.write(f"target_path: {target_path}\n shortcut_path: {shortcut_path}\n old_path: {old_path}\n")
@@ -90,8 +95,8 @@ def create_shortcut(dest_path, old_path):
                 create_network_shortcut(target_path, shortcut_path)
         else:
             with open('C:\\nifi-1.24.0\\log_shortcut.txt', 'a') as file: file.write(f"project specified\n")
-            target_path  = fr"\\45drives\hometree\DataWorkFolder\{current_year}\{instrument}\{asset}\{old_path}"
-            shortcut_path= fr"\\45drives\hometree\Operations\Projects\AllCurrentProjects\{project}\DataLinks\{instrument}\{filename}.lnk" #fileame ????? old_path #assets probably not needed here
+            target_path  = fr"\\softtest\Quality\hometree\DataWorkFolder\{current_year}\{instrument}\{asset}\{old_path}"
+            shortcut_path= fr"\\softtest\Quality\hometree\Operations\Projects\AllCurrentProjects\{project}\DataLinks\{instrument}\{filename}.lnk" #fileame ????? old_path #assets probably not needed here
             os.makedirs(os.path.dirname(shortcut_path), exist_ok=True)
 
             with open('C:\\nifi-1.24.0\\log_shortcut.txt', 'a') as file: file.write(f"target_path: {target_path}\n shortcut_path: {shortcut_path}\n old_path: {old_path}\n")
@@ -99,7 +104,7 @@ def create_shortcut(dest_path, old_path):
             # CHECK IF SHORTCUT EXISTS, create:
             if not os.path.isfile(shortcut_path):
                 create_network_shortcut(target_path, shortcut_path)
-                set_folder_hidden_status(f"//45drives/hometree/Operations/Projects/AllCurrentProjects/{project}/DataLinks/{instrument}", hide=False)
+                set_folder_hidden_status(f"//softtest/Quality/hometree/Operations/Projects/AllCurrentProjects/{project}/DataLinks/{instrument}", hide=False)
     except Exception as e:
         exit(e)
 
@@ -127,7 +132,7 @@ og_filepath = '{0}\{1}'.format(path, filename)
 
 # Work folder root path:
 current_year = datetime.datetime.now().year
-workfolder_path = rf"\\45drives\hometree\DataWorkFolder\{current_year}\{instrument}\{asset}"
+workfolder_path = rf"\\softtest\Quality\hometree\DataWorkFolder\{current_year}\{instrument}\{asset}"
 
 # Destination path:
 og_filepath_stripped = og_filepath.replace(home_path, '')
