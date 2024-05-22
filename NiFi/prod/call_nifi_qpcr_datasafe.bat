@@ -1,0 +1,1 @@
+python -W ignore C:\scripts\prod\nifi_qpcr_datasafe.py %*
